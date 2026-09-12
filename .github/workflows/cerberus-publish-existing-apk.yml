@@ -1,0 +1,77 @@
+name: Publish Existing Cerberus APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cerberus/bionic-v820-fixed-r1-build
+    paths:
+      - .github/workflows/cerberus-publish-existing-apk.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Download validated run-4 artifact chunks and metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/p00 work/p01 work/meta
+          gh api -H 'Accept: application/vnd.github+json' \
+            "/repos/$REPO/actions/artifacts/10307162539/zip" > work/p00.zip
+          gh api -H 'Accept: application/vnd.github+json' \
+            "/repos/$REPO/actions/artifacts/10307252546/zip" > work/p01.zip
+          gh api -H 'Accept: application/vnd.github+json' \
+            "/repos/$REPO/actions/artifacts/10307122727/zip" > work/meta.zip
+          unzip -q work/p00.zip -d work/p00
+          unzip -q work/p01.zip -d work/p01
+          unzip -q work/meta.zip -d work/meta
+          find work -maxdepth 2 -type f -printf '%p %s bytes\n'
+
+      - name: Reassemble and cryptographically verify APK
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk"
+          P00=$(find work/p00 -type f -name '*.part-00' -print -quit)
+          P01=$(find work/p01 -type f -name '*.part-01' -print -quit)
+          SHA_FILE=$(find work/meta -type f -name 'original.apk.sha256' -print -quit)
+          SIZE_FILE=$(find work/meta -type f -name 'original.apk.size' -print -quit)
+          test -n "$P00" && test -n "$P01" && test -n "$SHA_FILE" && test -n "$SIZE_FILE"
+          cat "$P00" "$P01" > "$OUT"
+          EXPECTED_SIZE=$(tr -d '[:space:]' < "$SIZE_FILE")
+          ACTUAL_SIZE=$(stat -c '%s' "$OUT")
+          test "$ACTUAL_SIZE" = "$EXPECTED_SIZE"
+          EXPECTED_SHA=$(awk '{print $1}' "$SHA_FILE")
+          ACTUAL_SHA=$(sha256sum "$OUT" | awk '{print $1}')
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          cp "$SHA_FILE" "$OUT.sha256"
+          unzip -t "$OUT" >/dev/null
+          echo "APK verified: $ACTUAL_SIZE bytes"
+          echo "SHA256=$ACTUAL_SHA"
+
+      - name: Publish complete APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          APK="$GITHUB_WORKSPACE/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk"
+          TAG='cerberus-bionic-v8.2.0-fixed-r1'
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$REPO" --yes --cleanup-tag
+          fi
+          gh release create "$TAG" \
+            "$APK#Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk" \
+            "$APK.sha256#Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.sha256" \
+            --repo "$REPO" \
+            --target '${{ github.sha }}' \
+            --title 'Cerberus Winlator V8.2.0 BIONIC FULL INTEGRATION FIXED R1' \
+            --notes 'APK reconstructed byte-for-byte from validated workflow run #4 artifacts. Size and SHA-256 were matched against run #4 metadata and ZIP integrity was rechecked before publication.'
+          gh release view "$TAG" --repo "$REPO" --json url,tagName,assets
