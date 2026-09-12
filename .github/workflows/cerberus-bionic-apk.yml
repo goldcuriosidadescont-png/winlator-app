@@ -10,7 +10,7 @@ on:
       - .github/workflows/cerberus-bionic-apk.yml
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: cerberus-bionic-${{ github.ref }}
@@ -89,6 +89,23 @@ jobs:
           apk.with_suffix('.apk.sha256').write_text(f'{digest.hexdigest()}  {apk.name}\n')
           print(f'APK verified: {apk.stat().st_size} bytes; SHA256={digest.hexdigest()}')
           PY
+
+      - name: Publish verified APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk
+          SHA_FILE="$APK.sha256"
+          TAG="cerberus-bionic-v8.2.0-fixed-r1-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "$APK#Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk" \
+            "$SHA_FILE#Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Cerberus Winlator V8.2.0 BIONIC FULL INTEGRATION FIXED R1" \
+            --notes "Verified Cerberus Bionic APK from workflow run ${GITHUB_RUN_ID}. apksigner, ZIP CRC and required Bionic/ARM64EC/x86_64 payload checks passed before publication."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,tagName,assets
 
       - name: Split APK for connector transport
         run: |
