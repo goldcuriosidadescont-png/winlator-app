@@ -38,7 +38,7 @@ def main():
     selected=[]
     for f in assets.rglob('*'):
         if not f.is_file() or f.suffix.lower() not in ALLOWED:continue
-        rel=f.relative_to(assets).as_posix().lower();leaf=f.name.lower();ok=any(t in rel for t in TOKENS) or bool(re.match(r'^(imagefs|rootfs)([_\.-].*)?\.(tzst|txz|zst|xz)$',leaf))
+        rel=f.relative_to(assets).as_posix().lower();leaf=f.name.lower();ok=leaf in {'container_pattern_x86_64.tzst','container_pattern_arm64ec.tzst'} or any(t in rel for t in TOKENS) or bool(re.match(r'^(imagefs|rootfs)([_\.-].*)?\.(tzst|txz|zst|xz)$',leaf))
         if ok:selected.append(f)
     if not selected:raise SystemExit('[FAIL] nenhum payload Bionic seletivo encontrado; importação da base inteira foi bloqueada.')
     pointers=[p for p in selected if lfs_pointer(p)]
