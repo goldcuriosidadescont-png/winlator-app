@@ -1,0 +1,1 @@
+package android.widget; import android.content.Context; import java.util.List; public class ArrayAdapter<T> { public ArrayAdapter(Context c,int l,List<T> x){} public ArrayAdapter(Context c,int l,T[] x){} }

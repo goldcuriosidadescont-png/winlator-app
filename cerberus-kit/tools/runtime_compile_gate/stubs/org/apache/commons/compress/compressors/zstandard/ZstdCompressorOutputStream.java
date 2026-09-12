@@ -1,0 +1,1 @@
+package org.apache.commons.compress.compressors.zstandard; import java.io.*; public class ZstdCompressorOutputStream extends FilterOutputStream { public ZstdCompressorOutputStream(OutputStream o,int l)throws IOException{super(o);} }

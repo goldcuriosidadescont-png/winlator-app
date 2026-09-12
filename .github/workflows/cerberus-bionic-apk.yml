@@ -1,0 +1,110 @@
+name: Cerberus Bionic APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cerberus/bionic-v820-fixed-r1-build
+    paths:
+      - cerberus-kit/**
+      - .github/workflows/cerberus-bionic-apk.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cerberus-bionic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      GIT_LFS_SKIP_SMUDGE: '1'
+    defaults:
+      run:
+        working-directory: cerberus-kit
+        shell: bash
+    steps:
+      - name: Checkout Cerberus sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare exact Android toolchain
+        run: |
+          mkdir -p output
+          command -v sdkmanager
+          command -v git-lfs
+          test -n "$ANDROID_HOME"
+          # Runner images include Android SDK command-line tools.
+          sdkmanager --sdk_root="$ANDROID_HOME" --install \
+            'platforms;android-35' 'build-tools;35.0.0' \
+            'ndk;24.0.8215888' 'cmake;3.22.1' 2>&1 | tee output/toolchain.log
+          python3 CONFIGURE-CERBERUS-SDK.py --sdk "$ANDROID_HOME" --no-install
+          python3 SYNC-NDK-RUNTIME.py --sdk "$ANDROID_HOME"
+
+      - name: Validate Cerberus source
+        run: python3 VERIFY-BIONIC.py 2>&1 | tee output/source-validation.log
+
+      - name: Prepare pinned Bionic payload
+        run: python3 PREPARE-BIONIC.py 2>&1 | tee output/prepare-bionic.log
+
+      - name: Build Cerberus Bionic APK
+        run: python3 BUILD-BIONIC.py --sdk "$ANDROID_HOME" 2>&1 | tee output/build-bionic.log
+
+      - name: Verify APK and calculate SHA-256
+        run: |
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee output/apk-signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > output/apk-badging.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          apk = Path('output/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk')
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None, 'APK CRC error'
+              entries = set(z.namelist())
+              for required in ['AndroidManifest.xml', 'classes.dex', 'lib/arm64-v8a/libomp.so', 'assets/cerberus-bionic/manifest.json']:
+                  assert required in entries, f'APK missing {required}'
+              for prefix in ['assets/cerberus-bionic/imagefs.', 'assets/cerberus-bionic/container-pattern-x86_64.', 'assets/cerberus-bionic/container-pattern-arm64ec.']:
+                  assert any(n.startswith(prefix) for n in entries), f'APK missing {prefix}'
+          digest = hashlib.sha256()
+          with apk.open('rb') as stream:
+              for block in iter(lambda: stream.read(1024 * 1024), b''):
+                  digest.update(block)
+          apk.with_suffix('.apk.sha256').write_text(f'{digest.hexdigest()}  {apk.name}\n')
+          print(f'APK verified: {apk.stat().st_size} bytes; SHA256={digest.hexdigest()}')
+          PY
+
+      - name: Save APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-APK-${{ github.run_number }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            cerberus-kit/output/*.apk
+            cerberus-kit/output/*.apk.sha256
+            cerberus-kit/output/LATEST-APK.txt
+            cerberus-kit/output/apk-signature.txt
+            cerberus-kit/output/apk-badging.txt
+
+      - name: Save build logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-logs-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: cerberus-kit/output/*.log

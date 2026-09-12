@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:orientation="vertical"
+    android:padding="11dp"
+    android:background="@drawable/cerberus_component_card">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:layout_width="30dp" android:layout_height="30dp" android:padding="5dp" android:src="@drawable/ic_cerberus_driver" android:tint="#FF1744" android:contentDescription="TURNIP" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="9dp" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TURNIP" android:textColor="#F7F9FB" android:textSize="11.5sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="Mesa Vulkan para Adreno • feed oficial Winlator" android:textColor="#7E8995" android:textSize="8.5sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="38dp" android:layout_marginTop="9dp" android:orientation="horizontal" android:gravity="center_vertical">
+        <Spinner android:tag="cerberus_spinner_turnip" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1.25" android:background="@drawable/cerberus_input" android:paddingStart="7dp" android:paddingEnd="5dp" android:spinnerMode="dropdown" />
+        <TextView android:layout_width="78dp" android:layout_height="36dp" android:layout_marginStart="7dp" android:gravity="center" android:text="GITHUB" android:textColor="#FFFFFF" android:textSize="8sp" android:textStyle="bold" android:background="@drawable/cerberus_mini_button_red" android:clickable="true" android:focusable="true" android:onClick="cerberusAdrenoTurnip" />
+        <TextView android:layout_width="72dp" android:layout_height="36dp" android:layout_marginStart="6dp" android:gravity="center" android:text="ARQUIVO" android:textColor="#F7F9FB" android:textSize="8sp" android:textStyle="bold" android:background="@drawable/cerberus_mini_button_dark" android:clickable="true" android:focusable="true" android:onClick="cerberusAdrenoTurnipFile" />
+    </LinearLayout>
+</LinearLayout>

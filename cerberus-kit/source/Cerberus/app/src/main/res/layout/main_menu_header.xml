@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="224dp"
+    android:background="@drawable/cerberus_drawer_header_v2">
+
+    <ImageView
+        android:layout_width="132dp"
+        android:layout_height="132dp"
+        android:layout_gravity="end|top"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="-18dp"
+        android:alpha="0.10"
+        android:scaleType="centerInside"
+        android:src="@drawable/cerberus_brand_mark"
+        android:contentDescription="CERBERUS" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="bottom"
+        android:paddingStart="22dp"
+        android:paddingEnd="22dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="22dp">
+
+        <FrameLayout
+            android:layout_width="62dp"
+            android:layout_height="62dp"
+            android:background="@drawable/cerberus_logo_frame_v2">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:src="@drawable/cerberus_brand_mark"
+                android:scaleType="centerInside"
+                android:contentDescription="CERBERUS" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:text="CERBERUS WINLATOR"
+            android:textColor="#F8FAFC"
+            android:textSize="19sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.05" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="PC GAMING NO SEU ANDROID"
+            android:textColor="#8F99A5"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.20" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <View
+                android:layout_width="44dp"
+                android:layout_height="2dp"
+                android:background="#FF1744" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="V2 ADVANCED"
+                android:textColor="#FF1744"
+                android:textSize="8sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

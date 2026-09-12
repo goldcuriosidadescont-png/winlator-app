@@ -1,0 +1,11 @@
+{
+  "product": "Cerberus Winlator",
+  "version": "8.2.0-Cerberus-Bionic",
+  "architecture": "classic-glibc-plus-selective-bionic",
+  "compiledBase": "Cerberus/Winlator",
+  "donorPolicy": "payload-and-reference-only",
+  "engines": {
+    "classic": ["x86_64/Box64"],
+    "bionic": ["x86_64/Box64", "ARM64EC/FEXCore", "ARM64EC/FEXCore-or-WOWBox64-32"]
+  }
+}

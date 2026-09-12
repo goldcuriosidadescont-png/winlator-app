@@ -1,0 +1,5 @@
+# Copy to cerberus-signing.properties and keep the real file private.
+storeFile=signing/cerberus-release.p12
+storePassword=CHANGE_ME
+keyAlias=cerberus-winlator
+keyPassword=CHANGE_ME

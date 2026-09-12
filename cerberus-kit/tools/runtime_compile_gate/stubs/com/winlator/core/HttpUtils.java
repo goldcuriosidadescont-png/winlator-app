@@ -1,0 +1,1 @@
+package com.winlator.core; import android.content.Context; import java.io.File; public class HttpUtils { public interface DownloadCallback{void call(boolean ok);} public static void download(Context c,String u,File f,DownloadCallback cb){} }

@@ -1,0 +1,1 @@
+package android.content.res; import java.io.*; public class AssetManager { public String[] list(String s) throws IOException{return null;} public InputStream open(String s) throws IOException{return null;} }

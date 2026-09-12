@@ -1,0 +1,26 @@
+CERBERUS WINLATOR V8.2.0 BIONIC — FIXED SOURCE KIT
+===================================================
+
+Use Python as the primary workflow:
+  python PREPARE-BIONIC.py
+  python VERIFY-BIONIC.py --require-payload
+  python BUILD-BIONIC.py
+
+The two .bat files are only optional Windows launchers for the Python scripts.
+There are no PowerShell implementation scripts in this package.
+
+Important fixes in this revision:
+- WCP ./profile.json compatibility and ZIP/TAR-XZ/TAR-ZSTD detection.
+- Safe canonical archive extraction and safe WCP mapped destinations.
+- Strict runtime/FEX/WOW selection; no silent fallback to another component.
+- FEX unixlib nested-layout support.
+- DXVK/VKD3D marker/payload consistency checks.
+- Transactional runtime/prefix changes with rollback and stale-marker reset.
+- Bionic root/version validation and hardened launch environment.
+- ProcessHelper and EnvVars crash/silent-failure fixes.
+- Python-only prepare/build tooling.
+- Android NDK libomp synchronization for libfluidsynth dependency.
+
+This ZIP is the repaired SOURCE KIT. It intentionally does not pretend to be a
+prebuilt APK. Prepare the pinned donor payload and run BUILD-BIONIC.py with the
+required Android toolchain, then test the generated APK on-device.

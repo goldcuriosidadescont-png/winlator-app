@@ -1,0 +1,1 @@
+package org.apache.commons.compress.compressors.xz; import java.io.*; public class XZCompressorOutputStream extends FilterOutputStream { public XZCompressorOutputStream(OutputStream o,int l)throws IOException{super(o);} }

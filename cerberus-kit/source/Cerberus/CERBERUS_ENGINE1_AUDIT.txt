@@ -1,0 +1,20 @@
+CERBERUS WINLATOR 0.2.0-ENGINE-1 STATIC AUDIT
+================================================
+
+applicationId: applicationId 'com.cerberus.winlator'
+version: versionName "0.2.0-ENGINE-1"
+versionCode: versionCode 3
+namespace: namespace 'com.winlator'
+
+stale /data/data/com.winlator paths: 0
+stale hardcoded com.winlator.FileProvider refs: 0
+Cerberus engine Java files: 4
+
+ENGINE-1 policy: detection-only; no runtime actuator introduced.
+Pure-Java resolver self-test:
+PASS SM8550 soc -> SM8550
+PASS Adreno 740 -> SM8550
+PASS Adreno 750 -> ADRENO_7XX
+PASS Adreno 650 -> ADRENO
+PASS Adreno text -> ADRENO
+PASS Mali -> GENERIC

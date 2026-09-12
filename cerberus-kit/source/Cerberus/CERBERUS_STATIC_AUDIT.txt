@@ -1,0 +1,12 @@
+Cerberus Winlator 0.1.0-BASE static audit
+=========================================
+Upstream commit: 4f55d117fff1542944e5b91f433470445160ce08
+External applicationId: com.cerberus.winlator
+Internal namespace: com.winlator
+Version code: 1
+Version name: 0.1.0-BASE
+Package-bound stale /data/data/com.winlator refs: 0
+Package-bound stale com.winlator.FileProvider refs: 0
+Signing material tracked in public source: NO
+Release signing hook: ENABLED when cerberus-signing.properties is present
+Performance/runtime behavior changes: NONE

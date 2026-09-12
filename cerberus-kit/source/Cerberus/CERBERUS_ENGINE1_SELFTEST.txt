@@ -1,0 +1,6 @@
+PASS SM8550 soc -> SM8550
+PASS Adreno 740 -> SM8550
+PASS Adreno 750 -> ADRENO_7XX
+PASS Adreno 650 -> ADRENO
+PASS Adreno text -> ADRENO
+PASS Mali -> GENERIC

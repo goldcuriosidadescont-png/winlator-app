@@ -1,0 +1,91 @@
+import java.util.Properties
+
+apply plugin: 'com.android.application'
+
+def cerberusSigningPropertiesFile = rootProject.file("cerberus-signing.properties")
+def cerberusSigningProperties = new Properties()
+def cerberusSigningEnabled = cerberusSigningPropertiesFile.exists()
+
+if (cerberusSigningEnabled) {
+    cerberusSigningPropertiesFile.withInputStream { cerberusSigningProperties.load(it) }
+}
+
+
+android {
+    namespace 'com.winlator'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'com.winlator'
+        minSdkVersion 26
+        targetSdkVersion 28
+        versionCode 820
+        versionName "8.2.0-Cerberus-Bionic"
+    }
+
+    signingConfigs {
+        if (cerberusSigningEnabled) {
+            cerberusRelease {
+                storeFile rootProject.file(cerberusSigningProperties['storeFile'])
+                storePassword cerberusSigningProperties['storePassword']
+                keyAlias cerberusSigningProperties['keyAlias']
+                keyPassword cerberusSigningProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            ndk {
+                abiFilters 'arm64-v8a'
+            }
+        }
+
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            ndk {
+                abiFilters 'arm64-v8a'
+            }
+
+            if (cerberusSigningEnabled) {
+                signingConfig signingConfigs.cerberusRelease
+            }
+        }
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+    }
+
+    // Cerberus Bionic carries pre-compressed runtime payloads. Do not waste heap
+    // trying to deflate them again during :app:compressDebugAssets.
+    androidResources {
+        noCompress.add('')
+    }
+
+
+    ndkVersion '24.0.8215888'
+
+    externalNativeBuild {
+        cmake {
+            version '3.22.1'
+            path 'src/main/cpp/CMakeLists.txt'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.4.0'
+    implementation 'androidx.preference:preference:1.2.1'
+    implementation 'com.google.android.material:material:1.4.0'
+    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+    implementation 'org.tukaani:xz:1.7'
+    implementation 'org.apache.commons:commons-compress:1.20'
+    implementation 'androidx.lifecycle:lifecycle-process:2.5.1'
+}

@@ -1,0 +1,24 @@
+CERBERUS V8.2.0 REPAIRED SOURCE KIT — VALIDATION RESULT
+========================================================
+[PASS] Cerberus Runtime Java compile gate:
+       23 runtime classes + Bionic launcher + ProcessHelper/EnvVars/TarCompressorUtils
+[PASS] CERBERUS_V820_RUNTIME_POLICY_SELFTEST
+[PASS] runtime_java_files=23
+[PASS] resource_xml_files=164
+[PASS] jni_libs=24 (AArch64 ELF inventory)
+[PASS] WCP TAR/ZIP + ./profile.json compatibility
+[PASS] archive traversal guards
+[PASS] exact runtime/component selection
+[PASS] transactional runtime/prefix ownership
+[PASS] Bionic imagefs structural validation
+[PASS] Bionic launcher environment repair
+[PASS] DXVK/VKD3D installed-payload verification
+[PASS] Python-only implementation scripts; no .ps1 files
+[PASS] XML/resource parsing
+[PASS] runtime Java compile gate
+[PASS] runtime architecture policy self-test
+[WARN] libfluidsynth.so requires libomp.so. The matching AArch64 libomp.so is
+       synchronized from configured NDK 24.0.8215888 by SYNC-NDK-RUNTIME.py at
+       build time; no arbitrary libomp binary is bundled in this source kit.
+[NOTE] Final Gradle/APK build was not run in the packaging environment because
+       the complete Android SDK/NDK and prepared donor payload are not present.

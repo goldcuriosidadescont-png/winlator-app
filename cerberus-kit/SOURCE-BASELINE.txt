@@ -1,0 +1,6 @@
+Compiled application base: Cerberus Winlator source, package com.winlator.
+Upstream lineage: official Winlator 11.2 source baseline + Cerberus UI/component
+work ported source-native from the validated V6/V7 line.
+
+This V8.2 package intentionally does NOT compile Bannerlator/Succubussix app/UI.
+The Bionic donor only supplies runtime filesystem/container-pattern payloads.

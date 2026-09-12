@@ -1,0 +1,1 @@
+package com.winlator.contentdialog; import android.content.Context; import java.util.ArrayList; public class ContentDialog { public interface Cb {void call(ArrayList<Integer> p);} public static void showSelectionList(Context c,String t,String[] l,boolean m,Cb cb){} }

@@ -1,0 +1,26 @@
+Alias name: cerberus-winlator
+Creation date: Sep 11, 2026
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=Cerberus Winlator, OU=Release, O=Cerberus Tweaks
+Issuer: CN=Cerberus Winlator, OU=Release, O=Cerberus Tweaks
+Serial number: 292369a294cebcd0
+Valid from: Fri Sep 11 16:20:08 UTC 2026 until: Tue Jan 27 16:20:08 UTC 2054
+Certificate fingerprints:
+	 SHA1: 20:01:AC:A5:12:22:7E:6A:94:68:BC:B7:7E:A6:FF:BF:6C:AF:40:14
+	 SHA256: 7E:3A:A0:10:2D:BA:B3:06:EB:5D:B1:09:DC:EC:8B:97:AF:2A:7A:0F:A8:34:A4:9C:19:92:16:94:95:85:6D:F5
+Signature algorithm name: SHA256withRSA
+Subject Public Key Algorithm: 4096-bit RSA key
+Version: 3
+
+Extensions: 
+
+#1: ObjectId: 2.5.29.14 Criticality=false
+SubjectKeyIdentifier [
+KeyIdentifier [
+0000: 27 4F 81 65 A3 68 7E 09   C4 CA 42 E6 83 0A 19 85  'O.e.h....B.....
+0010: D0 C6 65 BC                                        ..e.
+]
+]
+

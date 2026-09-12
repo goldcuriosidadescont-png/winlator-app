@@ -1,0 +1,1 @@
+package com.winlator.container; import java.io.File; public class Container { public File getRootDir(){return null;} public String getExtra(String k){return "";} public String getExtra(String k,String f){return f;} public void putExtra(String k,Object v){} public String getWineVersion(){return "";} }

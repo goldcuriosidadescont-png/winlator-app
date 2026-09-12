@@ -1,0 +1,1 @@
+package com.winlator.core; import java.io.File; import android.content.Context; public class TarCompressorUtils { public enum Type{XZ,ZSTD} public static boolean extract(Type t,Context c,String a,File d){return true;} public static boolean extract(Type t,File s,File d){return true;} public static byte[] read(Type t,File f,String p){return null;} }

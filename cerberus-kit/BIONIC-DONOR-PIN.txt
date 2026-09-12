@@ -1,0 +1,6 @@
+Donor policy: payload/reference only; never compiled application base.
+Repository: https://github.com/Succubussix/winlator-bionic-glibc.git
+Branch: winlator_bionic
+Expected HEAD prefix: 1a07048
+Imported payload namespace: app/src/main/assets/cerberus-bionic/
+Donor code reference namespace: work/donor-code-reference/ (NOT COMPILED)

@@ -1,0 +1,60 @@
+CERBERUS WINLATOR V8.2.0 — BIONIC FULL INTEGRATION / REPAIRED KIT
+==================================================================
+
+BASE / OWNERSHIP
+- Compiled app source: source/Cerberus only.
+- Package/application lineage: com.winlator / Cerberus Winlator.
+- Donor checkout is reference/BionicDonor and is NOT a Gradle source root.
+- Donor Java/UI is never copied into app/src/main/java or res.
+
+ENGINES
+- Classic: GLIBC + x86_64 + Box64 (legacy Cerberus path preserved).
+- Bionic x86_64: isolated Bionic root + Box64.
+- Bionic ARM64EC: FEXCore 64-bit; FEXCore or WOWBox64 for 32-bit.
+- Wine/Proton family does not choose the CPU translator; architecture does.
+
+REPAIRS INCLUDED
+- WCP parser accepts profile.json and ./profile.json.
+- WCP supports ZIP-compatible packages and TAR streams compressed with XZ/ZSTD,
+  selected by content magic rather than extension alone.
+- ZIP/TAR archive traversal and mapped-target traversal are rejected.
+- Explicit FEXCore/WOWBox64/runtime selections no longer silently fall back to a
+  different installed component.
+- FEX unixlib lookup/install handles nested aarch64-unix/arm64ec-unix layouts.
+- DXVK/VKD3D installed markers require the registered target files to exist.
+- Runtime installation and prefix transitions use staging/rollback ownership.
+- Engine/architecture/family/runtime changes invalidate stale component state
+  and create a fresh prefix when required.
+- Proton selection cannot silently initialize builtin Wine.
+- Bionic root install version/layout checks were hardened.
+- RootFS malformed/empty version markers fail safely.
+- Bionic launch environment repaired for linker/XDG/fontconfig/ALSA/OpenSSL/
+  Vulkan/GStreamer/preload variables; correct FEX_SMCCHECKS is emitted.
+- ProcessHelper handles null EnvVars, keeps process lifecycle callbacks alive
+  when PID introspection fails, and avoids broad silent execution failure.
+- Process enumeration uses the PPID descendant tree and tolerates /proc races.
+- EnvVars ignores malformed tokens instead of crashing parsing.
+- JNI audit found libfluidsynth.so -> libomp.so; BUILD-BIONIC.py runs
+  SYNC-NDK-RUNTIME.py to copy the matching AArch64 libomp.so from the configured
+  NDK instead of embedding an arbitrary binary.
+- PowerShell implementation scripts were removed. Prepare/import/verify/SDK/
+  NDK-runtime/build/APK collection are Python. BAT files only launch Python.
+
+SOURCE VALIDATION IN THIS PACKAGE ENVIRONMENT
+- 23 Cerberus runtime Java classes + Bionic launcher + ProcessHelper/EnvVars/
+  TarCompressorUtils pass the included javac gate.
+- 164 Android XML resources parse successfully.
+- Runtime architecture policy self-test passes.
+- 24 bundled JNI libraries are valid ELF/AArch64; the only unresolved bundled
+  dependency is libomp.so, intentionally synchronized from NDK 24.0.8215888 at
+  build time.
+- Python automation compiles with py_compile.
+- No PowerShell script files remain in the kit.
+
+FINAL ANDROID BUILD NOTE
+- This packaging environment does not contain the complete Android SDK/NDK and
+  does not contain the prepared Bionic donor payload. Therefore no claim is made
+  that an APK was assembled here.
+- Run PREPARE-BIONIC.py followed by BUILD-BIONIC.py on the build machine, then
+  validate x86_64 Bionic and ARM64EC/FEX/WOWBox64 containers on the target
+  Galaxy S23.

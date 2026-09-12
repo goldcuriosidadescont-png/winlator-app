@@ -1,0 +1,7 @@
+CERBERUS WINLATOR UPSTREAM PROVENANCE
+=====================================
+Source: BrunoDev Winlator 11.2
+Repository: https://github.com/brunodev85/winlator-app
+Pinned commit: 4f55d117fff1542944e5b91f433470445160ce08
+Uploaded source archive SHA256: 7a76895b2d944f73adb0f46159ab11d4da2881cac32267443809b3ec59256297
+Baseline manifest archive SHA256: afa8ad5ed9a32aa76c189d6591f254569628bb63ba9d01b1ff7ea94aebf00f5e
