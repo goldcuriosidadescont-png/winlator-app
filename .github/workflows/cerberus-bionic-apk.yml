@@ -51,7 +51,6 @@ jobs:
           command -v sdkmanager
           command -v git-lfs
           test -n "$ANDROID_HOME"
-          # Runner images include Android SDK command-line tools.
           sdkmanager --sdk_root="$ANDROID_HOME" --install \
             'platforms;android-35' 'build-tools;35.0.0' \
             'ndk;24.0.8215888' 'cmake;3.22.1' 2>&1 | tee output/toolchain.log
@@ -91,16 +90,47 @@ jobs:
           print(f'APK verified: {apk.stat().st_size} bytes; SHA256={digest.hexdigest()}')
           PY
 
-      - name: Save APK
+      - name: Split APK for connector transport
+        run: |
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk
+          mkdir -p output/chunks
+          rm -f output/chunks/*
+          split -b 350M -d -a 2 "$APK" output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-
+          cp "$APK.sha256" output/chunks/original.apk.sha256
+          wc -c < "$APK" | tr -d ' ' > output/chunks/original.apk.size
+          test -f output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-00
+          test -f output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-01
+          test ! -f output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-02
+          ls -lh output/chunks
+
+      - name: Save APK part 00
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Cerberus-Bionic-APK-${{ github.run_number }}
+          name: Cerberus-Bionic-APK-part00-${{ github.run_number }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+          path: cerberus-kit/output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-00
+
+      - name: Save APK part 01
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-APK-part01-${{ github.run_number }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+          path: cerberus-kit/output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION.apk.part-01
+
+      - name: Save APK metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-APK-metadata-${{ github.run_number }}
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
           path: |
-            cerberus-kit/output/*.apk
-            cerberus-kit/output/*.apk.sha256
+            cerberus-kit/output/chunks/original.apk.sha256
+            cerberus-kit/output/chunks/original.apk.size
             cerberus-kit/output/LATEST-APK.txt
             cerberus-kit/output/apk-signature.txt
             cerberus-kit/output/apk-badging.txt
