@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct verified v0.3 source
+      - name: Reconstruct verified v0.3 source and apply XKB layout fix
         run: |
           cat ci/v0.3/source64.part* | base64 -d > /tmp/CerberusPC-v0.3.0-source.tar.zst
           echo '55424ea835354ac845317f2efe81e4bb66565a812d725da5294ed00c11cc2990  /tmp/CerberusPC-v0.3.0-source.tar.zst' | sha256sum -c -
@@ -20,6 +20,17 @@ jobs:
           rm -rf build-v03
           mkdir -p build-v03
           tar -xf /tmp/CerberusPC-v0.3.0-source.tar -C build-v03
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py')
+          s = p.read_text()
+          old = '''    xkb = prefix / "share" / "X11" / "xkb"\n    if not xkb.is_dir(): raise RuntimeError("xkeyboard-config data missing")\n'''
+          new = '''    xkb_candidates = [\n        prefix / "share" / "X11" / "xkb",\n        prefix / "share" / "xkeyboard-config-2",\n        prefix / "share" / "xkb",\n    ]\n    xkb = next((p for p in xkb_candidates if p.is_dir()), None)\n    if xkb is None:\n        for candidate in prefix.rglob("*"):\n            if not candidate.is_dir():\n                continue\n            if all((candidate / part).exists() for part in ("rules", "symbols", "keycodes", "types", "compat")):\n                xkb = candidate\n                break\n    if xkb is None:\n        roots = sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*xkb*") if p.is_dir())\n        raise RuntimeError("xkeyboard-config data missing; candidates=" + ",".join(roots[:30]))\n    print("xkeyboard-config root:", xkb)\n'''
+          if old not in s:
+              raise SystemExit('expected XKB block not found')
+          p.write_text(s.replace(old, new))
+          PY
+          python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
