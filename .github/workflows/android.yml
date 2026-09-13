@@ -54,6 +54,21 @@ jobs:
           echo 'b70efdbfe28ca6eda762d64eb44192f4ed0cc7788fa4a2cc66dde66577d0426a  /tmp/CerberusPC-v0.4.0-patch.tar.gz' | sha256sum -c -
           tar -xzf /tmp/CerberusPC-v0.4.0-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
 
+          # Android's java.lang.Process API does not expose Java 9 Process.pid().
+          # The live Session owns/kills its child directly; crash recovery selects a free DISPLAY.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DisplayServerManager.java')
+          s = p.read_text()
+          old = '        writeText(pidFile, Long.toString(process.pid()) + "\\n");\n'
+          new = ('        // Android Process has no public pid(); Session owns this child directly.\n'
+                 '        // A stale server after process death is bypassed by choosing a free DISPLAY.\n'
+                 '        pidFile.delete();\n')
+          if old not in s:
+              raise SystemExit('expected Android-incompatible Process.pid() line not found')
+          p.write_text(s.replace(old, new))
+          PY
+
           cd build-v03/CerberusPC-v0.3.0
           grep -F "versionCode 8" app/build.gradle
           grep -F "versionName '0.4.0-desktop-manager'" app/build.gradle
@@ -63,6 +78,11 @@ jobs:
           grep -F 'continuando boot em modo somente vídeo' app/src/main/java/dev/cerberus/pc/DesktopActivity.java
           grep -F 'x11.pid' app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
           grep -F 'chooseAvailableDisplay' app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
+          grep -F 'pidFile.delete();' app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
+          if grep -Fq 'process.pid()' app/src/main/java/dev/cerberus/pc/DisplayServerManager.java; then
+            echo 'Android-incompatible Process.pid() survived hotfix' >&2
+            exit 1
+          fi
           grep -F 'WINDOWS CONTAINER MANAGER' app/src/main/java/dev/cerberus/pc/MainActivity.java
           grep -F 'VARIÁVEIS DE AMBIENTE' app/src/main/java/dev/cerberus/pc/MainActivity.java
           grep -F 'cerberus-windows-v4' app/src/main/java/dev/cerberus/pc/RuntimeManager.java
