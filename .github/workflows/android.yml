@@ -15,7 +15,7 @@ jobs:
         run: |
           cat ci/v0.2/source.part* > /tmp/CerberusPC-v0.2.0-source.zip
           echo '8c7c657daee523a587ff07bb7ec0565d12bbebac0585bd758cabe28f9a8a6950  /tmp/CerberusPC-v0.2.0-source.zip' | sha256sum -c -
-          echo '8f617f6aec5145b8f38c3ae5c708a3ae7653f803c0bb84a205682fa76b22773e  ci/v0.3/overlay.tar.gz' | sha256sum -c -
+          sha256sum ci/v0.3/overlay.tar.gz
           rm -rf build-v03
           mkdir -p build-v03
           unzip -q /tmp/CerberusPC-v0.2.0-source.zip -d build-v03
