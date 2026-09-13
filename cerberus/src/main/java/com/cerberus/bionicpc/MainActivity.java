@@ -210,8 +210,12 @@ final class Ui {
         if (!primary) bg.setStroke(dp(c, 1), Color.rgb(65, 72, 87));
         b.setBackground(bg);
         b.setOnClickListener(v -> action.run());
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(primary ? 0 : -2, dp(c, 46), primary ? 1f : 0f);
-        lp.setMargins(0, dp(c, 5), dp(c, 8), dp(c, 5));
+
+        boolean horizontal = p.getOrientation() == LinearLayout.HORIZONTAL;
+        LinearLayout.LayoutParams lp;
+        if (horizontal && primary) lp = new LinearLayout.LayoutParams(0, dp(c, 46), 1f);
+        else lp = new LinearLayout.LayoutParams(horizontal ? -2 : -1, dp(c, 46));
+        lp.setMargins(0, dp(c, 5), horizontal ? dp(c, 8) : 0, dp(c, 5));
         p.addView(b, lp);
         return b;
     }
