@@ -19,7 +19,7 @@ jobs:
           rm -rf build-v03
           mkdir -p build-v03
           unzip -q /tmp/CerberusPC-v0.2.0-source.zip -d build-v03
-          mv build-v03/cerberuspc_v02 build-v03/CerberusPC-v0.3.0
+          mv build-v03/CerberusPC-v0.2.0 build-v03/CerberusPC-v0.3.0
           tar -xzf ci/v0.3/overlay.tar.gz -C build-v03/CerberusPC-v0.3.0
       - uses: actions/setup-java@v5
         with:
