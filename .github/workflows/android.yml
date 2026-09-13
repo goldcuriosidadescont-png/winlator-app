@@ -26,9 +26,21 @@ jobs:
           echo 'ca112aaf3ba94e98e367d87829ead8d55303d6d45481b6c49ea95db81682d593  /tmp/CerberusPC-v0.3.1-patch.tar.gz' | sha256sum -c -
           tar -xzf /tmp/CerberusPC-v0.3.1-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
 
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DesktopActivity.java')
+          s = p.read_text()
+          old = "for (String line : lines) out.append(line).append('\\n');"
+          new = "for (String logLine : lines) out.append(logLine).append('\\n');"
+          if old not in s:
+              raise SystemExit('expected diagnostics loop not found')
+          p.write_text(s.replace(old, new))
+          PY
+
           grep -F "versionCode 4" build-v03/CerberusPC-v0.3.0/app/build.gradle
           grep -F "versionName '0.3.1-boot-ui-stability'" build-v03/CerberusPC-v0.3.0/app/build.gradle
           grep -F 'KEYCODE_MOVE_END' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java
+          grep -F 'for (String logLine : lines)' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DesktopActivity.java
           grep -F 'xkeyboard-config-2' build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
           python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
 
