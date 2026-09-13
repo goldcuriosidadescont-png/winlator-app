@@ -103,12 +103,38 @@ jobs:
           rm "$OUT"
           ls -lh cerberus-kit/output
 
-      - name: Upload APK artifact
+      - name: Upload APK part 00
         uses: actions/upload-artifact@v4
         with:
-          name: Cerberus-Winlator-R3-APK
+          name: Cerberus-Winlator-R3-part00
+          path: cerberus-kit/output/Cerberus-R3.apk.part-00
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload APK part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cerberus-Winlator-R3-part01
+          path: cerberus-kit/output/Cerberus-R3.apk.part-01
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload APK part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cerberus-Winlator-R3-part02
+          path: cerberus-kit/output/Cerberus-R3.apk.part-02
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cerberus-Winlator-R3-metadata
           path: |
-            cerberus-kit/output/Cerberus-R3.apk.part-*
             cerberus-kit/output/SHA256SUMS.txt
             cerberus-kit/output/SIZE.txt
             gradle-r3.log
