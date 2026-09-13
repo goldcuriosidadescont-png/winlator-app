@@ -1,18 +1,18 @@
-name: Cerberus PC - v0.3.1 Boot UI APK
+name: Cerberus PC - v0.3.2 Windows Runtime APK
 on:
   push:
-    branches: [ 'cerberuspc-boot-ui-v0.3.1' ]
+    branches: [ 'cerberuspc-windows-runtime-v0.3.2' ]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  boot-ui:
+  windows-runtime:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct verified v0.3 base and apply v0.3.1 patch
+      - name: Reconstruct verified v0.3.1 base and apply v0.3.2 Windows runtime
         run: |
           cat ci/v0.3/source64.part* | base64 -d > /tmp/CerberusPC-v0.3.0-source.tar.zst
           echo '55424ea835354ac845317f2efe81e4bb66565a812d725da5294ed00c11cc2990  /tmp/CerberusPC-v0.3.0-source.tar.zst' | sha256sum -c -
@@ -26,22 +26,29 @@ jobs:
           echo 'ca112aaf3ba94e98e367d87829ead8d55303d6d45481b6c49ea95db81682d593  /tmp/CerberusPC-v0.3.1-patch.tar.gz' | sha256sum -c -
           tar -xzf /tmp/CerberusPC-v0.3.1-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
 
+          cat ci/v0.3.2/patch64.part* | base64 -d > /tmp/CerberusPC-v0.3.2-patch.tar.gz
+          echo '5147a795b75dd88bf32671c54f1a926bb489dd7847057ab94eacd669f2ff333c  /tmp/CerberusPC-v0.3.2-patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/CerberusPC-v0.3.2-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
+
           python3 - <<'PY'
           from pathlib import Path
           p = Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DesktopActivity.java')
           s = p.read_text()
           old = "for (String line : lines) out.append(line).append('\\n');"
           new = "for (String logLine : lines) out.append(logLine).append('\\n');"
-          if old not in s:
-              raise SystemExit('expected diagnostics loop not found')
-          p.write_text(s.replace(old, new))
+          if old in s:
+              p.write_text(s.replace(old, new))
+          elif new not in s:
+              raise SystemExit('diagnostics loop not recognized')
           PY
 
-          grep -F "versionCode 4" build-v03/CerberusPC-v0.3.0/app/build.gradle
-          grep -F "versionName '0.3.1-boot-ui-stability'" build-v03/CerberusPC-v0.3.0/app/build.gradle
+          grep -F "versionCode 5" build-v03/CerberusPC-v0.3.0/app/build.gradle
+          grep -F "versionName '0.3.2-windows-runtime'" build-v03/CerberusPC-v0.3.0/app/build.gradle
+          grep -F 'PROTON_ASSET = "runtime/proton.cerberus"' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/RuntimeManager.java
+          grep -F 'windows.ready' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/RuntimeManager.java
+          grep -F 'x11-xkb.cerberus' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
           grep -F 'KEYCODE_MOVE_END' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java
           grep -F 'for (String logLine : lines)' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DesktopActivity.java
-          grep -F 'xkeyboard-config-2' build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
           python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
 
       - uses: actions/setup-java@v5
@@ -69,9 +76,18 @@ jobs:
         working-directory: build-v03/CerberusPC-v0.3.0
         run: sh tools/test_bridge.sh
 
-      - name: Stage Box64 + Proton/Wine runtime
+      - name: Stage Box64 + Proton/Wine + Windows prefix
         working-directory: build-v03/CerberusPC-v0.3.0
-        run: bash tools/prepare_runtime_ci.sh
+        run: |
+          bash tools/prepare_runtime_ci.sh
+          test -s app/src/main/assets/runtime/proton.cerberus
+          test -s app/src/main/assets/runtime/windows-prefix.cerberus
+          tar -tzf app/src/main/assets/runtime/proton.cerberus | grep -E '(^|/)bin/wine$'
+          tar -tzf app/src/main/assets/runtime/proton.cerberus | grep -E '(^|/)bin/wineserver$'
+          tar -tzf app/src/main/assets/runtime/windows-prefix.cerberus | grep -E '(^|/)\.wine/drive_c/windows/system32/' | head -1
+          tar -tzf app/src/main/assets/runtime/windows-prefix.cerberus | grep -E '(^|/)\.wine/drive_c/windows/explorer\.exe$'
+          tar -tzf app/src/main/assets/runtime/windows-prefix.cerberus | grep -E '(^|/)\.wine/system\.reg$'
+          tar -tzf app/src/main/assets/runtime/windows-prefix.cerberus | grep -E '(^|/)\.wine/user\.reg$'
 
       - name: Stage Cerberus X11 display runtime
         working-directory: build-v03/CerberusPC-v0.3.0
@@ -83,30 +99,60 @@ jobs:
           test -x app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so
           test -x app/src/main/jniLibs/arm64-v8a/libcerberus_xkbcomp.so
           test -s app/src/main/assets/runtime/x11-native-map.properties
-          test -s app/src/main/assets/runtime/x11-xkb.tar.gz
-          test -s app/src/main/assets/runtime/x11-guest.tar.gz
+          test -s app/src/main/assets/runtime/x11-xkb.cerberus
+          test -s app/src/main/assets/runtime/x11-guest.cerberus
           readelf -h app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so | grep -E 'AArch64|ARM64'
-          tar -tzf app/src/main/assets/runtime/x11-guest.tar.gz | grep -E '(^|/)libX11\.so'
-          tar -tzf app/src/main/assets/runtime/x11-guest.tar.gz | grep -E '(^|/)libXext\.so'
+          tar -tzf app/src/main/assets/runtime/x11-guest.cerberus | grep -E '(^|/)libX11\.so'
+          tar -tzf app/src/main/assets/runtime/x11-guest.cerberus | grep -E '(^|/)libXext\.so'
 
       - name: Build and lint ARM64 debug APK
         working-directory: build-v03/CerberusPC-v0.3.0
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
 
-      - name: Verify v0.3.1 APK payload
+      - name: Verify v0.3.2 APK preserves Cerberus runtime assets
         run: |
           APK='build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk'
           test -s "$APK"
           unzip -tq "$APK"
-          unzip -l "$APK" | grep -E 'lib/arm64-v8a/libbox64.so|lib/arm64-v8a/libcerberus_xvfb.so|lib/arm64-v8a/libcerberus_xkbcomp.so|assets/runtime/proton.tar.gz|assets/runtime/prefix-template.tar.gz|assets/runtime/x11-guest.tar.gz|assets/runtime/x11-xkb.tar.gz|assets/runtime/x11-native-map.properties'
-          unzip -l "$APK" | grep 'lib/arm64-v8a/libcerberus_x11dep_' | head -1
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionCode='4'"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionName='0.3.1-boot-ui-stability'"
+          python3 - "$APK" <<'PY'
+          import sys, zipfile
+          apk=sys.argv[1]
+          required=[
+              'assets/runtime/proton.cerberus',
+              'assets/runtime/windows-prefix.cerberus',
+              'assets/runtime/x11-guest.cerberus',
+              'assets/runtime/x11-xkb.cerberus',
+              'assets/runtime/x11-native-map.properties',
+              'lib/arm64-v8a/libbox64.so',
+              'lib/arm64-v8a/libcerberus_xvfb.so',
+              'lib/arm64-v8a/libcerberus_xkbcomp.so',
+          ]
+          gzip_assets=required[:4]
+          with zipfile.ZipFile(apk) as z:
+              names=set(z.namelist())
+              missing=[x for x in required if x not in names]
+              if missing: raise SystemExit('missing APK payload: '+', '.join(missing))
+              for name in gzip_assets:
+                  with z.open(name) as f:
+                      if f.read(2) != b'\x1f\x8b':
+                          raise SystemExit(name+' was transformed by AAPT; gzip magic missing')
+              forbidden=[n for n in names if n in {
+                  'assets/runtime/proton.tar', 'assets/runtime/proton.tar.gz',
+                  'assets/runtime/prefix-template.tar', 'assets/runtime/prefix-template.tar.gz',
+                  'assets/runtime/x11-guest.tar', 'assets/runtime/x11-guest.tar.gz',
+                  'assets/runtime/x11-xkb.tar', 'assets/runtime/x11-xkb.tar.gz'}]
+              if forbidden: raise SystemExit('legacy AAPT-transformed assets present: '+', '.join(forbidden))
+              if not any(n.startswith('lib/arm64-v8a/libcerberus_x11dep_') for n in names):
+                  raise SystemExit('X11 native dependency payload missing')
+          print('Cerberus runtime assets preserved with gzip magic')
+          PY
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionCode='5'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionName='0.3.2-windows-runtime'"
           sha256sum "$APK"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CerberusPC-v0.3.1-BootUI-arm64-debug
+          name: CerberusPC-v0.3.2-WindowsRuntime-arm64-debug
           path: build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           compression-level: 0
