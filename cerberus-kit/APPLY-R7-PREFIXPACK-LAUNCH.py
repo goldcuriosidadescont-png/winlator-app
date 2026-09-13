@@ -14,7 +14,7 @@ build = root / 'app/build.gradle'
 # ---------------------------------------------------------------------------
 # 1) R7 launcher: prefixPack is already the authoritative initialized prefix.
 #    Validate/fingerprint it, then launch Explorer/game directly. Do NOT force
-#    wineboot -u before every fresh Bionic container.
+#    Wine prefix migration before every fresh Bionic container.
 # ---------------------------------------------------------------------------
 s = launcher.read_text(encoding='utf-8')
 old_consts = '''    public static final String BUILD_MARKER = "Cerberus-Bionic-Launcher-R6";\n    public static final String PREFIX_INIT_MARKER = ".cerberus-prefix-r6.initializing";\n    public static final String PREFIX_READY_MARKER = ".cerberus-prefix-r6.ready";\n'''
@@ -39,8 +39,8 @@ if start < 0 or end < 0:
     raise SystemExit('[FAIL] R6 bootstrap block not found')
 
 direct_launch = r'''        // R7: the selected WCP prefixPack/container pattern is already an
-        // initialized prefix.  A forced wineboot -u here re-enters Wine's
-        // migration path and can leave a half-updated prefix when Android kills
+        // initialized prefix.  A forced migration here re-enters Wine's prefix
+        // update path and can leave a half-updated prefix when Android kills
         // the session.  Validate the extracted prefix and launch directly.
         File prefixDir = new File(prefixPath);
         if (!prefixDir.isDirectory()
@@ -92,8 +92,8 @@ direct_launch = r'''        // R7: the selected WCP prefixPack/container pattern
 '''
 s = s[:start] + direct_launch + s[end:]
 
-if 'wineboot.exe -u' in s:
-    raise SystemExit('[FAIL] forced wineboot still present in R7 launcher')
+if 'String bootstrapArgs = "wineboot.exe -u";' in s:
+    raise SystemExit('[FAIL] forced wineboot command still present in R7 launcher')
 launcher.write_text(s, encoding='utf-8')
 
 # ---------------------------------------------------------------------------
