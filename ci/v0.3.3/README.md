@@ -1,0 +1,1 @@
+CerberusPC v0.3.3 X11 lock/prefix relocation patch. This branch removes the hard-coded Termux X11 prefix from host X11 ELF payloads and creates the Cerberus-owned compatibility prefix used by Xvfb locks, sockets and xkbcomp.
