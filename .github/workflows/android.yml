@@ -38,7 +38,7 @@ jobs:
         run: sh tools/test_bridge.sh
       - name: Stage Box64 + Proton/Wine runtime
         working-directory: build-v02/CerberusPC-v0.2.0
-        run: sh tools/prepare_runtime_ci.sh
+        run: bash tools/prepare_runtime_ci.sh
       - name: Build and lint ARM64 debug APK
         working-directory: build-v02/CerberusPC-v0.2.0
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
