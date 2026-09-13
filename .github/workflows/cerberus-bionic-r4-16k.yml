@@ -1,0 +1,246 @@
+name: Cerberus Bionic R4 16K Compat APK
+
+on:
+  push:
+    branches:
+      - cerberus/bionic-v820-fixed-r4-16k-compat
+    paths:
+      - cerberus-kit/**
+      - .github/workflows/cerberus-bionic-r4-16k.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cerberus-bionic-r4-16k-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      GIT_LFS_SKIP_SMUDGE: '1'
+    defaults:
+      run:
+        working-directory: cerberus-kit
+        shell: bash
+
+    steps:
+      - name: Checkout Cerberus sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Apply exact R3 source overlay
+        run: |
+          set -euo pipefail
+          cat r3-overlay/part-*.b64 > /tmp/cerberus-r3-overlay.tar.gz.b64
+          test "$(wc -c < /tmp/cerberus-r3-overlay.tar.gz.b64 | tr -d ' ')" = "37036"
+          printf '%s  %s\n' \
+            '82c197d5a76128ea112688e2aeb1fe76738eb7561a1d2a56dec5b7335497c75c' \
+            '/tmp/cerberus-r3-overlay.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/cerberus-r3-overlay.tar.gz.b64 > /tmp/cerberus-r3-overlay.tar.gz
+          printf '%s  %s\n' \
+            '5d2b7318c9904abea9e8dc98454f79efecd62b63cd6775369b9559b9c6f9ef70' \
+            '/tmp/cerberus-r3-overlay.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/cerberus-r3-overlay.tar.gz -C .
+          grep -F 'versionCode 822' source/Cerberus/app/build.gradle
+          grep -F '8.2.0-Cerberus-Bionic-R3-ANR-Container-Fix' source/Cerberus/app/build.gradle
+
+      - name: Apply R4 Android 16 16KB compatibility patch
+        run: |
+          set -euo pipefail
+          python3 APPLY-R4-16K.py source/Cerberus | tee /tmp/r4-patch.log
+          mkdir -p output
+          cp /tmp/r4-patch.log output/r4-patch.log
+          grep -F 'compileSdk 36' source/Cerberus/app/build.gradle
+          grep -F "buildToolsVersion '36.0.0'" source/Cerberus/app/build.gradle
+          grep -F 'versionCode 823' source/Cerberus/app/build.gradle
+          grep -F '8.2.0-Cerberus-Bionic-R4-16K-Compat' source/Cerberus/app/build.gradle
+          grep -F 'android:pageSizeCompat="enabled"' source/Cerberus/app/src/main/AndroidManifest.xml
+          grep -F 'max-page-size=16384' source/Cerberus/app/src/main/cpp/CMakeLists.txt
+          grep -F 'common-page-size=16384' source/Cerberus/app/src/main/cpp/CMakeLists.txt
+          grep -F 'installing_system_files' source/Cerberus/app/src/main/java/com/winlator/XServerDisplayActivity.java
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK command-line tools
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+
+      - name: Prepare Android 16 toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          command -v sdkmanager
+          test -n "$ANDROID_HOME"
+          sdkmanager --sdk_root="$ANDROID_HOME" --install \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;24.0.8215888' \
+            'cmake;3.22.1' 2>&1 | tee output/toolchain.log
+          python3 CONFIGURE-CERBERUS-SDK.py --source source/Cerberus --sdk "$ANDROID_HOME" --no-install
+          python3 SYNC-NDK-RUNTIME.py --source source/Cerberus --sdk "$ANDROID_HOME"
+
+      - name: Prepare pinned Bionic donor payload
+        run: |
+          set -euo pipefail
+          rm -rf reference/BionicDonor
+          git clone --depth 1 --branch winlator_bionic --single-branch \
+            https://github.com/Succubussix/winlator-bionic-glibc.git \
+            reference/BionicDonor 2>&1 | tee output/donor-clone.log
+          DONOR_HEAD="$(git -C reference/BionicDonor rev-parse HEAD)"
+          echo "Bionic donor HEAD=$DONOR_HEAD" | tee output/donor-head.log
+          case "$DONOR_HEAD" in
+            1a07048*) ;;
+            *) echo "Unexpected Bionic donor commit: $DONOR_HEAD" >&2; exit 1 ;;
+          esac
+          python3 IMPORT-BIONIC-DONOR.py \
+            --donor reference/BionicDonor \
+            --source source/Cerberus 2>&1 | tee output/import-bionic.log
+
+      - name: Build Cerberus Bionic R4 APK
+        run: |
+          set -euo pipefail
+          cd source/Cerberus
+          chmod +x gradlew
+          ./gradlew --stop || true
+          ./gradlew clean assembleDebug --no-parallel --max-workers=2 2>&1 | tee ../../output/gradle-build.log
+
+      - name: Collect APK into output
+        run: |
+          set -euo pipefail
+          python3 COLLECT-APK.py \
+            --source source/Cerberus \
+            --kit-root . \
+            --output-name Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk 2>&1 | tee output/collect-apk.log
+          test -s output/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk
+
+      - name: Verify R4 APK and 16KB policy
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee output/apk-signature.txt
+          "$BT/aapt" dump badging "$APK" | tee output/apk-badging.txt
+          grep -F "versionCode='823'" output/apk-badging.txt
+          grep -F "versionName='8.2.0-Cerberus-Bionic-R4-16K-Compat'" output/apk-badging.txt
+          "$BT/aapt" dump xmltree "$APK" AndroidManifest.xml | tee output/manifest-tree.txt
+          grep -F 'pageSizeCompat' output/manifest-tree.txt
+
+          rm -rf /tmp/cerberus-apk-libs
+          mkdir -p /tmp/cerberus-apk-libs
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d /tmp/cerberus-apk-libs
+          READELF="$ANDROID_HOME/ndk/24.0.8215888/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          export READELF
+          python3 - <<'PY' | tee output/elf-16k-report.txt
+          import os, pathlib, re, subprocess, sys
+          root = pathlib.Path('/tmp/cerberus-apk-libs/lib/arm64-v8a')
+          readelf = os.environ['READELF']
+          owned = {
+              'libwinlator.so', 'libmidihandler.so', 'libvirglrenderer.so',
+              'libvortekrenderer.so', 'libgladiorenderer.so'
+          }
+          failures = []
+          legacy_4k = []
+          for p in sorted(root.glob('*.so')):
+              out = subprocess.check_output([readelf, '-lW', str(p)], text=True, errors='replace')
+              aligns = []
+              for line in out.splitlines():
+                  if line.lstrip().startswith('LOAD'):
+                      value = line.split()[-1]
+                      aligns.append(int(value, 16))
+              min_align = min(aligns) if aligns else 0
+              status = '16K+' if min_align >= 0x4000 else '4K-LEGACY'
+              print(f'{p.name}: {status}; LOAD_ALIGN={[hex(x) for x in aligns]}')
+              if p.name in owned and min_align < 0x4000:
+                  failures.append(p.name)
+              if min_align < 0x4000:
+                  legacy_4k.append(p.name)
+          if failures:
+              raise SystemExit('Cerberus-built ELF not 16K aligned: ' + ', '.join(failures))
+          print('CERBERUS_OWNED_16K=PASS')
+          print('LEGACY_PREBUILT_4K_COUNT=' + str(len(legacy_4k)))
+          print('LEGACY_PREBUILT_4K=' + ','.join(legacy_4k))
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          apk = Path('output/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk')
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None, 'APK CRC error'
+              entries = set(z.namelist())
+              for item in ['AndroidManifest.xml','classes.dex','lib/arm64-v8a/libomp.so','assets/cerberus-bionic/manifest.json']:
+                  assert item in entries, f'APK missing {item}'
+              for prefix in ['assets/cerberus-bionic/imagefs.','assets/cerberus-bionic/container-pattern-x86_64.','assets/cerberus-bionic/container-pattern-arm64ec.']:
+                  assert any(n.startswith(prefix) for n in entries), f'APK missing {prefix}'
+          h = hashlib.sha256()
+          with apk.open('rb') as f:
+              for block in iter(lambda: f.read(1024 * 1024), b''):
+                  h.update(block)
+          digest = h.hexdigest()
+          Path(str(apk)+'.sha256').write_text(f'{digest}  {apk.name}\n')
+          Path('output/apk-size.txt').write_text(str(apk.stat().st_size)+'\n')
+          print(f'APK verified: {apk.stat().st_size} bytes; SHA256={digest}')
+          PY
+
+      - name: Publish verified R4 APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk
+          TAG="cerberus-bionic-v8.2.0-r4-16k-compat-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "$APK#Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk" \
+            "$APK.sha256#Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Cerberus Winlator V8.2.0 BIONIC R4 16K Compat" \
+            --notes "R4 fixes the Android 16 launch warning path by explicitly enabling pageSizeCompat and links all Cerberus-built native libraries with 16 KiB ELF page alignment. Legacy third-party JNI prebuilts are kept under Android 16 backcompat until ABI-compatible 16 KiB replacements are available. R3 async Bionic install/container activation is preserved and the first-install preloader now shows installation state instead of a generic startup spinner."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,tagName,assets | tee output/release.json
+
+      - name: Split APK for artifact transport
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk
+          mkdir -p output/chunks
+          rm -f output/chunks/*
+          split -b 350M -d -a 2 "$APK" output/chunks/Cerberus-Winlator-V8.2.0-BIONIC-R4-16K-COMPAT.apk.part-
+          cp "$APK.sha256" output/chunks/original.apk.sha256
+          cp output/apk-size.txt output/chunks/original.apk.size
+          ls -lh output/chunks
+
+      - name: Save APK transport and reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-R4-16K-${{ github.run_number }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            cerberus-kit/output/chunks/*
+            cerberus-kit/output/apk-signature.txt
+            cerberus-kit/output/apk-badging.txt
+            cerberus-kit/output/manifest-tree.txt
+            cerberus-kit/output/elf-16k-report.txt
+            cerberus-kit/output/release.json
+
+      - name: Save build logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Cerberus-Bionic-R4-16K-logs-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: cerberus-kit/output/*.log
