@@ -1,0 +1,117 @@
+name: Cerberus Winlator R3 APK
+
+on:
+  push:
+    branches:
+      - cerberus-r3-remote-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CERBERUS_KIT: cerberus-kit
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install exact Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;24.0.8215888" \
+            "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/24.0.8215888" >> "$GITHUB_ENV"
+
+      - name: Reconstruct and verify exact R3 source delta
+        shell: bash
+        working-directory: cerberus-kit
+        run: |
+          set -euo pipefail
+          cat .r3-overlay/part-* > /tmp/cerberus-r3-source-delta.tar.gz.b64
+          base64 -d /tmp/cerberus-r3-source-delta.tar.gz.b64 > /tmp/cerberus-r3-source-delta.tar.gz
+          echo "b81cd8cbb6f2f1684d8861dcb47bcb7fd071e389b9073f548fb55c9b18688ab6  /tmp/cerberus-r3-source-delta.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/cerberus-r3-source-delta.tar.gz
+          grep -q 'versionCode 822' source/Cerberus/app/build.gradle
+          grep -q '8.2.0-Cerberus-Bionic-R3-ANR-Container-Fix' source/Cerberus/app/build.gradle
+
+      - name: Prepare pinned Bionic payload
+        shell: bash
+        working-directory: cerberus-kit
+        run: |
+          set -euo pipefail
+          rm -rf reference/BionicDonor
+          export GIT_LFS_SKIP_SMUDGE=1
+          git clone --depth 1 --branch winlator_bionic --single-branch https://github.com/Succubussix/winlator-bionic-glibc.git reference/BionicDonor
+          git -C reference/BionicDonor fetch --depth 1 origin 1a070485e5060d85e75f41c34e91587557c65b73
+          git -C reference/BionicDonor checkout --detach FETCH_HEAD
+          test "$(git -C reference/BionicDonor rev-parse HEAD)" = "1a070485e5060d85e75f41c34e91587557c65b73"
+          python3 IMPORT-BIONIC-DONOR.py --donor reference/BionicDonor --source source/Cerberus
+          test -d source/Cerberus/app/src/main/assets/cerberus-bionic
+          find source/Cerberus/app/src/main/assets/cerberus-bionic -type f -size +0c | head -n 20
+
+      - name: Build debug APK
+        shell: bash
+        working-directory: cerberus-kit/source/Cerberus
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace clean :app:assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-r3.log"
+
+      - name: Collect and validate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="cerberus-kit/source/Cerberus/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="cerberus-kit/output/Cerberus-Winlator-V8.2.0-BIONIC-FULL-INTEGRATION-R3-ANR-CONTAINER-FIX.apk"
+          test -s "$APK"
+          mkdir -p cerberus-kit/output
+          cp "$APK" "$OUT"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
+          BADGING=$("$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$OUT" | head -n 1)
+          echo "$BADGING"
+          echo "$BADGING" | grep -q "name='com.winlator'"
+          echo "$BADGING" | grep -q "versionCode='822'"
+          echo "$BADGING" | grep -q "versionName='8.2.0-Cerberus-Bionic-R3-ANR-Container-Fix'"
+          unzip -t "$OUT" >/dev/null
+          sha256sum "$OUT" | tee cerberus-kit/output/SHA256SUMS.txt
+          stat -c '%n %s bytes' "$OUT" | tee cerberus-kit/output/SIZE.txt
+          split -b 300M -d -a 2 "$OUT" cerberus-kit/output/Cerberus-R3.apk.part-
+          rm "$OUT"
+          ls -lh cerberus-kit/output
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cerberus-Winlator-R3-APK
+          path: |
+            cerberus-kit/output/Cerberus-R3.apk.part-*
+            cerberus-kit/output/SHA256SUMS.txt
+            cerberus-kit/output/SIZE.txt
+            gradle-r3.log
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
