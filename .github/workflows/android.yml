@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct verified v0.3 source and apply XKB layout fix
+      - name: Reconstruct verified v0.3 source and apply build fixes
         run: |
           cat ci/v0.3/source64.part* | base64 -d > /tmp/CerberusPC-v0.3.0-source.tar.zst
           echo '55424ea835354ac845317f2efe81e4bb66565a812d725da5294ed00c11cc2990  /tmp/CerberusPC-v0.3.0-source.tar.zst' | sha256sum -c -
@@ -22,6 +22,7 @@ jobs:
           tar -xf /tmp/CerberusPC-v0.3.0-source.tar -C build-v03
           python3 - <<'PY'
           from pathlib import Path
+
           p = Path('build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py')
           s = p.read_text()
           old = '''    xkb = prefix / "share" / "X11" / "xkb"\n    if not xkb.is_dir(): raise RuntimeError("xkeyboard-config data missing")\n'''
@@ -29,8 +30,17 @@ jobs:
           if old not in s:
               raise SystemExit('expected XKB block not found')
           p.write_text(s.replace(old, new))
+
+          java = Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java')
+          js = java.read_text()
+          old_key = 'case KeyEvent.KEYCODE_END: return new KeyStroke(115, false);'
+          new_key = 'case KeyEvent.KEYCODE_MOVE_END: return new KeyStroke(115, false);'
+          if old_key not in js:
+              raise SystemExit('expected KEYCODE_END mapping not found')
+          java.write_text(js.replace(old_key, new_key))
           PY
           python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
+          grep -F 'KEYCODE_MOVE_END' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
