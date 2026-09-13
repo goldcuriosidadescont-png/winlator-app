@@ -47,7 +47,7 @@ jobs:
       - name: Install host build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl xz-utils tar unzip zip file binutils python3
+          sudo apt-get install -y curl xz-utils zstd p7zip-full tar unzip zip file binutils python3
 
       - name: Build Cerberus v0.5 all-in-one APK
         working-directory: cerberus-v05
