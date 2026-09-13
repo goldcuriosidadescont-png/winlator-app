@@ -1,0 +1,192 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -8,8 +8,8 @@
+         applicationId 'dev.cerberus.pc'
+         minSdk 26
+         targetSdk 35
+-        versionCode 5
+-        versionName '0.3.2-windows-runtime'
++        versionCode 6
++        versionName '0.3.3-x11-lock-fix'
+         ndk { abiFilters 'arm64-v8a' }
+         externalNativeBuild {
+             cmake { cppFlags '-std=c++17 -Wall -Wextra -Werror'; arguments '-DANDROID_STL=c++_static' }
+--- a/app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
++++ b/app/src/main/java/dev/cerberus/pc/DisplayServerManager.java
+@@ -27,7 +27,7 @@
+ final class DisplayServerManager {
+     interface Progress { void update(String text); }
+ 
+-    static final String DISPLAY_RUNTIME_VERSION = "cerberus-x11-xvfb-21.1.16-termux-component-v2";
++    static final String DISPLAY_RUNTIME_VERSION = "cerberus-x11-xvfb-21.1.16-cerberus-prefix-v3";
+     private final Context context;
+     private final File root;
+     private final File xkbRoot;
+@@ -37,6 +37,9 @@
+     private final File nativeDir;
+     private final File xvfb;
+     private final File xkbcomp;
++    private final File compatPrefix;
++    private final File compatTmp;
++    private final File compatSocketDir;
+ 
+     DisplayServerManager(Context context) {
+         this.context = context.getApplicationContext();
+@@ -48,6 +51,9 @@
+         nativeDir = new File(context.getApplicationInfo().nativeLibraryDir);
+         xvfb = new File(nativeDir, "libcerberus_xvfb.so");
+         xkbcomp = new File(nativeDir, "libcerberus_xkbcomp.so");
++        compatPrefix = new File(context.getApplicationInfo().dataDir, "xusr");
++        compatTmp = new File(compatPrefix, "tmp");
++        compatSocketDir = new File(compatTmp, ".X11-unix");
+     }
+ 
+     boolean packaged() { return xvfb.isFile() && xkbcomp.isFile(); }
+@@ -65,7 +71,8 @@
+         if (!packaged()) throw new IOException("Xvfb/xkbcomp ausentes do APK");
+         if (marker.isFile()) {
+             try {
+-                if (DISPLAY_RUNTIME_VERSION.equals(readSmall(marker).trim()) && xkbRoot.isDirectory() && new File(linksDir, ".ready").isFile()) return;
++                if (DISPLAY_RUNTIME_VERSION.equals(readSmall(marker).trim()) && xkbRoot.isDirectory()
++                        && new File(linksDir, ".ready").isFile() && compatibilityPrefixReady()) return;
+             } catch (IOException ignored) { }
+         }
+         progress.update("Preparando Cerberus X11…");
+@@ -76,6 +83,7 @@
+         }
+         createNativeLinks();
+         symlink(xkbcomp, new File(binDir, "xkbcomp"));
++        prepareCompatibilityPrefix();
+         touch(new File(linksDir, ".ready"));
+         writeText(marker, DISPLAY_RUNTIME_VERSION + "\n");
+         try { Os.chmod(xvfb.getAbsolutePath(), 0755); } catch (Exception ignored) { }
+@@ -94,8 +102,7 @@
+         File framebuffer = new File(fbDir, "Xvfb_screen0");
+         if (framebuffer.exists() && !framebuffer.delete()) throw new IOException("Falha limpando framebuffer anterior");
+         File log = new File(profile.logs(), "x11-server.log");
+-        File lock = new File(profile.tmp(), ".X" + display + "-lock");
+-        lock.delete();
++        clearDisplayArtifacts(display);
+ 
+         progress.update("Iniciando Cerberus X11 :" + display + " em " + profile.resolution + "…");
+         ProcessBuilder pb = new ProcessBuilder(
+@@ -107,8 +114,8 @@
+                 "-xkbdir", xkbRoot.getAbsolutePath());
+         Map<String, String> env = pb.environment();
+         env.put("HOME", profile.home().getAbsolutePath());
+-        env.put("TMPDIR", profile.tmp().getAbsolutePath());
+-        env.put("XDG_RUNTIME_DIR", profile.tmp().getAbsolutePath());
++        env.put("TMPDIR", compatTmp.getAbsolutePath());
++        env.put("XDG_RUNTIME_DIR", compatTmp.getAbsolutePath());
+         env.put("XKB_BINDIR", binDir.getAbsolutePath());
+         env.put("XKB_CONFIG_ROOT", xkbRoot.getAbsolutePath());
+         env.put("LD_LIBRARY_PATH", linksDir.getAbsolutePath() + ":" + nativeDir.getAbsolutePath());
+@@ -157,6 +164,48 @@
+         } catch (NumberFormatException e) { return 0; }
+     }
+ 
++    private boolean compatibilityPrefixReady() {
++        return compatTmp.isDirectory() && compatSocketDir.isDirectory()
++                && new File(compatPrefix, "bin/xkbcomp").exists()
++                && new File(compatPrefix, "share/X11/xkb").exists();
++    }
++
++    private void prepareCompatibilityPrefix() throws IOException {
++        deleteRecursive(compatPrefix);
++        File compatBin = new File(compatPrefix, "bin");
++        File compatShareX11 = new File(compatPrefix, "share/X11");
++        File compatLibXorg = new File(compatPrefix, "lib/xorg");
++        mkdir(compatBin);
++        mkdir(compatShareX11);
++        mkdir(compatLibXorg);
++        mkdir(compatTmp);
++        mkdir(compatSocketDir);
++        symlink(xkbcomp, new File(compatBin, "xkbcomp"));
++        symlink(xkbRoot, new File(compatShareX11, "xkb"));
++        chmodBestEffort(compatTmp, 01777);
++        chmodBestEffort(compatSocketDir, 01777);
++    }
++
++    private void clearDisplayArtifacts(int display) throws IOException {
++        mkdir(compatTmp);
++        mkdir(compatSocketDir);
++        deleteIfPresent(new File(compatTmp, ".tX" + display + "-lock"));
++        deleteIfPresent(new File(compatTmp, ".X" + display + "-lock"));
++        deleteIfPresent(new File(compatSocketDir, "X" + display));
++        chmodBestEffort(compatTmp, 01777);
++        chmodBestEffort(compatSocketDir, 01777);
++    }
++
++    private static void deleteIfPresent(File f) throws IOException {
++        if ((f.exists() || Files.isSymbolicLink(f.toPath())) && !f.delete()) {
++            throw new IOException("Falha removendo artefato X11 anterior: " + f);
++        }
++    }
++
++    private static void chmodBestEffort(File f, int mode) {
++        try { Os.chmod(f.getAbsolutePath(), mode); } catch (Exception ignored) { }
++    }
++
+     private void createNativeLinks() throws IOException {
+         Properties p = new Properties();
+         try (InputStream in = context.getAssets().open("runtime/x11-native-map.properties")) { p.load(in); }
+--- a/tools/prepare_display_runtime_ci.py
++++ b/tools/prepare_display_runtime_ci.py
+@@ -20,6 +20,22 @@
+     ("https://mirror.freedif.org/termux/termux-main", "https://mirror.freedif.org/termux/termux-x11"),
+     ("https://packages.termux.dev/apt/termux-main", "https://packages.termux.dev/apt/termux-x11"),
+ ]
++TERMUX_PREFIX_BYTES = b"/data/data/com.termux/files/usr"
++CERBERUS_PREFIX_BYTES = b"/data/data/dev.cerberus.pc/xusr"
++if len(TERMUX_PREFIX_BYTES) != len(CERBERUS_PREFIX_BYTES):
++    raise RuntimeError("Cerberus compatibility prefix must preserve binary string length")
++
++
++def patched_host_bytes(path: Path) -> bytes:
++    data = path.read_bytes()
++    return data.replace(TERMUX_PREFIX_BYTES, CERBERUS_PREFIX_BYTES)
++
++
++def patched_host_copy(src: Path, dst: Path) -> None:
++    dst.write_bytes(patched_host_bytes(src))
++    shutil.copymode(src, dst)
++
++
+ SYSTEM_LIBS = {
+     "libc.so", "libm.so", "libdl.so", "liblog.so", "libz.so", "libandroid.so",
+     "libEGL.so", "libGLESv1_CM.so", "libGLESv2.so", "libvulkan.so",
+@@ -223,10 +239,16 @@
+     for p in JNILIBS.glob("libcerberus_x11dep_*.so"): p.unlink()
+     for p in [JNILIBS/"libcerberus_xvfb.so", JNILIBS/"libcerberus_xkbcomp.so"]:
+         if p.exists(): p.unlink()
+-    shutil.copy2(xvfb, JNILIBS / "libcerberus_xvfb.so")
+-    shutil.copy2(xkbcomp, JNILIBS / "libcerberus_xkbcomp.so")
++    patched_host_copy(xvfb, JNILIBS / "libcerberus_xvfb.so")
++    patched_host_copy(xkbcomp, JNILIBS / "libcerberus_xkbcomp.so")
+     os.chmod(JNILIBS / "libcerberus_xvfb.so", 0o755)
+     os.chmod(JNILIBS / "libcerberus_xkbcomp.so", 0o755)
++    for host_elf in [JNILIBS / "libcerberus_xvfb.so", JNILIBS / "libcerberus_xkbcomp.so"]:
++        data = host_elf.read_bytes()
++        if TERMUX_PREFIX_BYTES in data:
++            raise RuntimeError(f"unpatched Termux prefix remains in {host_elf.name}")
++        if CERBERUS_PREFIX_BYTES not in data:
++            raise RuntimeError(f"Cerberus prefix missing in {host_elf.name}")
+ 
+     real_to_packaged: dict[str, str] = {}
+     native_map: dict[str, str] = {}
+@@ -234,10 +256,13 @@
+         key = str(real)
+         packaged = real_to_packaged.get(key)
+         if not packaged:
+-            digest = hashlib.sha256(real.read_bytes()).hexdigest()[:12]
++            patched = patched_host_bytes(real)
++            digest = hashlib.sha256(patched).hexdigest()[:12]
+             packaged = f"libcerberus_x11dep_{digest}.so"
+             dst = JNILIBS / packaged
+-            if not dst.exists(): shutil.copy2(real, dst)
++            if not dst.exists():
++                dst.write_bytes(patched)
++                shutil.copymode(real, dst)
+             real_to_packaged[key] = packaged
+         native_map[original] = packaged
+     map_path = ASSETS / "x11-native-map.properties"
