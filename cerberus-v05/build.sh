@@ -30,6 +30,51 @@ verify() {
     [[ "$got" == "$expected" ]] || { echo "SHA256 mismatch for $file"; echo "expected=$expected"; echo "got=$got"; exit 1; }
 }
 
+extract_any() {
+    local src="$1" dst="$2"
+    mkdir -p "$dst"
+    echo "archive file(1): $(file -b "$src")"
+    echo -n "archive magic: "
+    od -An -tx1 -N16 "$src" | tr -d '\n'; echo
+
+    if unzip -tqq "$src" >/dev/null 2>&1; then
+        echo "archive format: ZIP"
+        unzip -q "$src" -d "$dst"
+        return 0
+    fi
+    if tar -tf "$src" >/dev/null 2>&1; then
+        echo "archive format: TAR"
+        tar -xf "$src" -C "$dst"
+        return 0
+    fi
+    if xz -t "$src" >/dev/null 2>&1; then
+        echo "archive format: XZ stream"
+        if xz -dc "$src" | tar -tf - >/dev/null 2>&1; then
+            xz -dc "$src" | tar -xf - -C "$dst"
+        else
+            xz -dc "$src" > "$dst/payload.bin"
+        fi
+        return 0
+    fi
+    if zstd -t "$src" >/dev/null 2>&1; then
+        echo "archive format: ZSTD stream"
+        if zstd -q -dc "$src" | tar -tf - >/dev/null 2>&1; then
+            zstd -q -dc "$src" | tar -xf - -C "$dst"
+        else
+            zstd -q -dc "$src" > "$dst/payload.bin"
+        fi
+        return 0
+    fi
+    if 7z t "$src" >/dev/null 2>&1; then
+        echo "archive format: 7z-supported container"
+        7z x -y -o"$dst" "$src" >/dev/null
+        return 0
+    fi
+
+    echo "Unsupported payload format: $src"
+    return 1
+}
+
 say "Downloading pinned Box64 Bionic 0.4.4"
 curl -L --fail --retry 4 --retry-delay 3 -o "$DL/box64.wcp" "$BOX64_URL"
 verify "$BOX64_SHA" "$DL/box64.wcp"
@@ -38,17 +83,15 @@ say "Downloading pinned Proton-Wine 11.0-2 x86_64 Bionic"
 curl -L --fail --retry 4 --retry-delay 3 -o "$DL/proton.wcp.xz" "$PROTON_URL"
 verify "$PROTON_SHA" "$DL/proton.wcp.xz"
 
-say "Inspecting/extracting Box64 WCP (XZ-compressed TAR)"
-xz -t "$DL/box64.wcp"
-xz -dc "$DL/box64.wcp" | tar -xf - -C "$STAGE/box64"
-BOX64_BIN="$(find "$STAGE/box64" -type f -name box64 | head -n1)"
-[[ -n "$BOX64_BIN" && -f "$BOX64_BIN" ]] || { echo "Box64 binary not found in WCP"; find "$STAGE/box64" -maxdepth 3 -type f -print; exit 1; }
+say "Detecting and extracting Box64 WCP"
+extract_any "$DL/box64.wcp" "$STAGE/box64"
+BOX64_BIN="$(find "$STAGE/box64" -type f -name box64 -print -quit)"
+[[ -n "$BOX64_BIN" && -f "$BOX64_BIN" ]] || { echo "Box64 binary not found in WCP"; find "$STAGE/box64" -maxdepth 4 -type f -print; exit 1; }
 cp -L "$BOX64_BIN" "$ASSETS/runtime/box64/box64"
 
-say "Inspecting/extracting Proton WCP.XZ"
-xz -t "$DL/proton.wcp.xz"
-xz -dc "$DL/proton.wcp.xz" | tar -xf - -C "$STAGE/proton"
-[[ -d "$STAGE/proton/bin" && -d "$STAGE/proton/lib" ]] || { echo "Unexpected Proton layout"; find "$STAGE/proton" -maxdepth 2 -type d -print; exit 1; }
+say "Detecting and extracting Proton WCP"
+extract_any "$DL/proton.wcp.xz" "$STAGE/proton"
+[[ -d "$STAGE/proton/bin" && -d "$STAGE/proton/lib" ]] || { echo "Unexpected Proton layout"; find "$STAGE/proton" -maxdepth 3 -type d -print | head -n100; exit 1; }
 cp -aL "$STAGE/proton/bin" "$ASSETS/runtime/proton/"
 cp -aL "$STAGE/proton/lib" "$ASSETS/runtime/proton/"
 if [[ -d "$STAGE/proton/share" ]]; then cp -aL "$STAGE/proton/share" "$ASSETS/runtime/proton/"; fi
@@ -77,7 +120,6 @@ SYSTEM = {
     'librt.so','libstdc++.so','libz.so','libEGL.so','libGLESv2.so','libvulkan.so'
 }
 
-# Files already delivered by Proton satisfy their own NEEDED names.
 provided = set()
 for root, _, files in os.walk(proton):
     for n in files:
