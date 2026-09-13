@@ -1,0 +1,115 @@
+name: Cerberus PC - v0.4.2 Runtime Lib Fix APK
+on:
+  push:
+    branches: [ 'cerberuspc-runtime-libfix-v0.4.2' ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime-libfix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct verified source and apply v0.4.2
+        run: |
+          cat ci/v0.3/source64.part* | base64 -d > /tmp/v03.tar.zst
+          echo '55424ea835354ac845317f2efe81e4bb66565a812d725da5294ed00c11cc2990  /tmp/v03.tar.zst' | sha256sum -c -
+          zstd -q -d /tmp/v03.tar.zst -o /tmp/v03.tar
+          echo '95a077429c7132cb71457e0989b3f3400a363e2451af60d96b380734a2465387  /tmp/v03.tar' | sha256sum -c -
+          rm -rf build-v03 && mkdir -p build-v03
+          tar -xf /tmp/v03.tar -C build-v03
+          cat ci/v0.3.1/patch64.part* | base64 -d > /tmp/p31.tgz
+          echo 'ca112aaf3ba94e98e367d87829ead8d55303d6d45481b6c49ea95db81682d593  /tmp/p31.tgz' | sha256sum -c -
+          tar -xzf /tmp/p31.tgz -C build-v03/CerberusPC-v0.3.0
+          cat ci/v0.3.2/patch64.part* | base64 -d > /tmp/p32.tgz
+          echo '5147a795b75dd88bf32671c54f1a926bb489dd7847057ab94eacd669f2ff333c  /tmp/p32.tgz' | sha256sum -c -
+          tar -xzf /tmp/p32.tgz -C build-v03/CerberusPC-v0.3.0
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DesktopActivity.java')
+          s=p.read_text(); old="for (String line : lines) out.append(line).append('\\n');"; new="for (String logLine : lines) out.append(logLine).append('\\n');"
+          if old in s: p.write_text(s.replace(old,new))
+          elif new not in s: raise SystemExit('diagnostics loop mismatch')
+          PY
+          cd build-v03/CerberusPC-v0.3.0 && patch -p1 < "$GITHUB_WORKSPACE/ci/v0.3.3/x11-prefix.patch" && cd "$GITHUB_WORKSPACE"
+          cat ci/v0.3.4/patch64.part* | base64 -d > /tmp/p34.tgz
+          echo '8c0dacba97ea73d4508a54a26bdff863cef943dfdcbc61e2c21d91aa00b7e967  /tmp/p34.tgz' | sha256sum -c -
+          tar -xzf /tmp/p34.tgz -C build-v03/CerberusPC-v0.3.0
+          cat ci/v0.4.0/patch64.part* | base64 -d > /tmp/p40.tgz
+          echo 'b70efdbfe28ca6eda762d64eb44192f4ed0cc7788fa4a2cc66dde66577d0426a  /tmp/p40.tgz' | sha256sum -c -
+          tar -xzf /tmp/p40.tgz -C build-v03/CerberusPC-v0.3.0
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/DisplayServerManager.java')
+          s=p.read_text(); old='        writeText(pidFile, Long.toString(process.pid()) + "\\n");\n'; new='        pidFile.delete();\n'
+          if old in s: p.write_text(s.replace(old,new))
+          elif 'process.pid()' in s: raise SystemExit('Process.pid hotfix failed')
+          PY
+          cat ci/v0.4.2/patch64.part* | base64 -d > /tmp/CerberusPC-v0.4.2-patch.tar.gz
+          echo '7a7d7ebe5ac649b42225b9e0d627308dd5906cb57499a22737db030c164f680b  /tmp/CerberusPC-v0.4.2-patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/CerberusPC-v0.4.2-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
+          cd build-v03/CerberusPC-v0.3.0
+          grep -F 'versionCode 10' app/build.gradle
+          grep -F "versionName '0.4.2-runtime-libfix'" app/build.gradle
+          grep -F "applicationId 'dev.cerberus.pf'" app/build.gradle
+          grep -F 'libfontconfig.so' tools/prepare_display_runtime_ci.py
+          grep -F 'FONTCONFIG_PATH' app/src/main/java/dev/cerberus/pc/RuntimeManager.java
+          grep -F 'cerberus-windows-v6-fontconfig' app/src/main/java/dev/cerberus/pc/RuntimeManager.java
+          python3 -m py_compile tools/prepare_display_runtime_ci.py
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - uses: android-actions/setup-android@v3
+      - name: Install Android toolchain
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.0.13004108' 'cmake;3.22.1'
+      - name: Install packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y zstd xz-utils binutils dpkg python3 patch
+      - name: Core and bridge tests
+        working-directory: build-v03/CerberusPC-v0.3.0
+        run: |
+          sh tools/test_host.sh
+          sh tools/test_bridge.sh
+      - name: Stage Box64 Proton Wine Windows
+        working-directory: build-v03/CerberusPC-v0.3.0
+        run: |
+          bash tools/prepare_runtime_ci.sh
+          test -s app/src/main/assets/runtime/proton.cerberus
+          test -s app/src/main/assets/runtime/windows-prefix.cerberus
+          tar -tzf app/src/main/assets/runtime/proton.cerberus | grep -E '(^|/)bin/wine$'
+          tar -tzf app/src/main/assets/runtime/proton.cerberus | grep -E '(^|/)bin/wineserver$'
+          tar -tzf app/src/main/assets/runtime/windows-prefix.cerberus | grep -E '(^|/)\.wine/drive_c/windows/explorer\.exe$'
+      - name: Stage X11 XKB XTEST font runtime
+        working-directory: build-v03/CerberusPC-v0.3.0
+        run: python3 tools/prepare_display_runtime_ci.py
+      - name: Validate fontconfig and guest ELF closure
+        working-directory: build-v03/CerberusPC-v0.3.0
+        run: |
+          test -x app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so
+          strings app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so | grep -q XTEST
+          grep -aF '/data/data/dev.cerberus.pf/xusr/tmp' app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so
+          for lib in libX11.so libXext.so libXcursor.so libXi.so libXrandr.so libXrender.so libfontconfig.so libfreetype.so; do
+            tar -tzf app/src/main/assets/runtime/x11-guest.cerberus | grep -E "(^|/)${lib//./\\.}$"
+          done
+          tar -tzf app/src/main/assets/runtime/x11-guest.cerberus | grep -Fx 'etc/fonts/fonts.conf'
+          tar -tzf app/src/main/assets/runtime/x11-guest.cerberus | grep -E '^etc/fonts/conf\.d/.+' | head -1
+      - name: Build and lint APK
+        working-directory: build-v03/CerberusPC-v0.3.0
+        run: gradle --no-daemon :app:assembleDebug :app:lintDebug
+      - name: Verify final APK payload
+        run: |
+          APK='build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK" && unzip -tq "$APK"
+          unzip -p "$APK" assets/runtime/x11-guest.cerberus > /tmp/guest.tgz
+          for lib in libfontconfig.so libfreetype.so libX11.so libXext.so; do tar -tzf /tmp/guest.tgz | grep -E "(^|/)${lib//./\\.}$"; done
+          tar -tzf /tmp/guest.tgz | grep -Fx 'etc/fonts/fonts.conf'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionCode='10'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionName='0.4.2-runtime-libfix'"
+          sha256sum "$APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CerberusPC-v0.4.2-RuntimeLibFix-arm64-debug
+          path: build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          compression-level: 0
