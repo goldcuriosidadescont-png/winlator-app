@@ -1,48 +1,21 @@
-apply plugin: 'com.android.application'
+plugins { id 'com.android.application' }
 
 android {
-    namespace 'com.winlator'
+    namespace 'dev.cerberus.pc'
     compileSdk 35
-
+    ndkVersion '28.0.13004108'
     defaultConfig {
-        applicationId 'com.winlator'
-        minSdkVersion 26
-        targetSdkVersion 28
-        versionCode 32
-        versionName "11.2"
-    }
-
-    buildTypes {
-        debug {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-
-            ndk {
-                abiFilters 'arm64-v8a'
-            }
+        applicationId 'dev.cerberus.pc'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0-genesis'
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild {
+            cmake { cppFlags '-std=c++17 -Wall -Wextra -Werror'; arguments '-DANDROID_STL=c++_static' }
         }
     }
-
-    lintOptions {
-        checkReleaseBuilds false
-    }
-
-    ndkVersion '24.0.8215888'
-
-    externalNativeBuild {
-        cmake {
-            version '3.22.1'
-            path 'src/main/cpp/CMakeLists.txt'
-        }
-    }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.4.0'
-    implementation 'androidx.preference:preference:1.2.1'
-    implementation 'com.google.android.material:material:1.4.0'
-    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
-    implementation 'org.tukaani:xz:1.7'
-    implementation 'org.apache.commons:commons-compress:1.20'
-    implementation 'androidx.lifecycle:lifecycle-process:2.5.1'
+    externalNativeBuild { cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { release { minifyEnabled false } }
 }
