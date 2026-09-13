@@ -1,0 +1,213 @@
+name: Cerberus Bionic R7 PrefixPack Launch APK
+
+on:
+  push:
+    branches:
+      - cerberus/bionic-v820-fixed-r7-prefixpack-launch
+    paths:
+      - cerberus-kit/**
+      - .github/scripts/r6_preflight_compat.py
+      - .github/workflows/cerberus-bionic-r7-prefixpack-launch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cerberus-bionic-r7-prefixpack-launch-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      GIT_LFS_SKIP_SMUDGE: '1'
+    defaults:
+      run:
+        working-directory: cerberus-kit
+        shell: bash
+
+    steps:
+      - name: Checkout Cerberus sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Reconstruct validated R3 baseline
+        run: |
+          set -euo pipefail
+          cat r3-overlay/part-*.b64 > /tmp/cerberus-r3-overlay.tar.gz.b64
+          test "$(wc -c < /tmp/cerberus-r3-overlay.tar.gz.b64 | tr -d ' ')" = "37036"
+          printf '%s  %s\n' '82c197d5a76128ea112688e2aeb1fe76738eb7561a1d2a56dec5b7335497c75c' /tmp/cerberus-r3-overlay.tar.gz.b64 | sha256sum -c -
+          base64 -d /tmp/cerberus-r3-overlay.tar.gz.b64 > /tmp/cerberus-r3-overlay.tar.gz
+          printf '%s  %s\n' '5d2b7318c9904abea9e8dc98454f79efecd62b63cd6775369b9559b9c6f9ef70' /tmp/cerberus-r3-overlay.tar.gz | sha256sum -c -
+          tar -xzf /tmp/cerberus-r3-overlay.tar.gz -C .
+          grep -F 'versionCode 822' source/Cerberus/app/build.gradle
+
+      - name: Preserve R4 Android 16 and 16KB fixes
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          python3 APPLY-R4-16K.py source/Cerberus | tee output/r4-patch.log
+          grep -F 'versionCode 823' source/Cerberus/app/build.gradle
+          grep -F 'android:pageSizeCompat="enabled"' source/Cerberus/app/src/main/AndroidManifest.xml
+          grep -F 'max-page-size=16384' source/Cerberus/app/src/main/cpp/CMakeLists.txt
+          grep -F 'common-page-size=16384' source/Cerberus/app/src/main/cpp/CMakeLists.txt
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK command-line tools
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+
+      - name: Prepare Android 16 toolchain
+        run: |
+          set -euo pipefail
+          sdkmanager --sdk_root="$ANDROID_HOME" --install \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;24.0.8215888' \
+            'cmake;3.22.1' 2>&1 | tee output/toolchain.log
+          python3 CONFIGURE-CERBERUS-SDK.py --source source/Cerberus --sdk "$ANDROID_HOME" --no-install
+          python3 SYNC-NDK-RUNTIME.py --source source/Cerberus --sdk "$ANDROID_HOME"
+
+      - name: Import pinned Bionic donor payload
+        run: |
+          set -euo pipefail
+          rm -rf reference/BionicDonor
+          git clone --depth 1 --branch winlator_bionic --single-branch \
+            https://github.com/Succubussix/winlator-bionic-glibc.git reference/BionicDonor 2>&1 | tee output/donor-clone.log
+          DONOR_HEAD="$(git -C reference/BionicDonor rev-parse HEAD)"
+          echo "Bionic donor HEAD=$DONOR_HEAD" | tee output/donor-head.log
+          case "$DONOR_HEAD" in 1a07048*) ;; *) echo "Unexpected Bionic donor commit: $DONOR_HEAD" >&2; exit 1 ;; esac
+          python3 IMPORT-BIONIC-DONOR.py --donor reference/BionicDonor --source source/Cerberus 2>&1 | tee output/import-bionic.log
+
+      - name: Preserve R5 Bionic container bootstrap
+        run: |
+          set -euo pipefail
+          python3 APPLY-R5-BIONIC-BOOT.py source/Cerberus | tee output/r5-patch.log
+          grep -F 'versionCode 824' source/Cerberus/app/build.gradle
+          L=source/Cerberus/app/src/main/java/com/winlator/xenvironment/components/CerberusBionicProgramLauncherComponent.java
+          grep -F 'BOX64_LD_LIBRARY_PATH' "$L"
+          grep -F 'usr/local/bin/box64' "$L"
+
+      - name: Preserve R6 Proton FEXCore infrastructure
+        run: |
+          set -euo pipefail
+          python3 ../.github/scripts/r6_preflight_compat.py before source/Cerberus
+          python3 APPLY-R6-PREFIX-PROTON-UI.py source/Cerberus | tee output/r6-patch.log
+          python3 ../.github/scripts/r6_preflight_compat.py after source/Cerberus
+          grep -F 'versionCode 825' source/Cerberus/app/build.gradle
+          grep -F 'RuntimeFamily.PROTON' source/Cerberus/app/src/main/java/com/winlator/xenvironment/components/CerberusBionicProgramLauncherComponent.java
+          grep -F 'recoverInterruptedInitialization(context,container,p)' source/Cerberus/app/src/main/java/com/winlator/cerberus/runtime/CerberusRuntimePreflight.java
+
+      - name: Apply R7 direct prefixPack lifecycle and Bionic UI fix
+        run: |
+          set -euo pipefail
+          python3 APPLY-R7-PREFIXPACK-LAUNCH.py source/Cerberus | tee output/r7-patch.log
+
+          # Normalize the diagnostic newline literals generated by the raw patch
+          # string. This changes diagnostics only; launch/runtime logic is untouched.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/Cerberus/app/src/main/java/com/winlator/xenvironment/components/CerberusBionicProgramLauncherComponent.java')
+          s=p.read_text()
+          s=s.replace(r"\\n", r"\n")
+          p.write_text(s)
+          PY
+
+          grep -F 'versionCode 826' source/Cerberus/app/build.gradle
+          grep -F '8.2.0-Cerberus-Bionic-R7-PrefixPack-Launch' source/Cerberus/app/build.gradle
+          L=source/Cerberus/app/src/main/java/com/winlator/xenvironment/components/CerberusBionicProgramLauncherComponent.java
+          grep -F 'Cerberus-Bionic-Launcher-R7' "$L"
+          grep -F 'stage=direct-prefixpack-launch' "$L"
+          grep -F '.cerberus-prefix-r7.ready' "$L"
+          ! grep -F 'wineboot.exe -u' "$L"
+          F=source/Cerberus/app/src/main/java/com/winlator/ContainerDetailFragment.java
+          grep -F 'boolean hideLegacyBox64Preset = p.engine == RuntimeEngine.BIONIC;' "$F"
+          grep -F 'if (!pendingRuntime.isBionic()) box64Preset = Box64PresetManager.getSpinnerSelectedId(sBox64Preset);' "$F"
+          P=source/Cerberus/app/src/main/java/com/winlator/cerberus/runtime/CerberusPrefixManager.java
+          grep -F '.cerberus-prefix-r7.recovering' "$P"
+          grep -F '.wine-interrupted-r7' "$P"
+          grep -F 'android:pageSizeCompat="enabled"' source/Cerberus/app/src/main/AndroidManifest.xml
+
+      - name: Build Cerberus Bionic R7 APK
+        run: |
+          set -euo pipefail
+          cd source/Cerberus
+          chmod +x gradlew
+          ./gradlew --stop || true
+          ./gradlew clean assembleDebug --no-parallel --max-workers=2 2>&1 | tee ../../output/gradle-build.log
+
+      - name: Collect and verify R7 APK
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-R7-PREFIXPACK-LAUNCH.apk
+          python3 COLLECT-APK.py --source source/Cerberus --kit-root . --output-name "$(basename "$APK")" 2>&1 | tee output/collect-apk.log
+          test -s "$APK"
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee output/apk-signature.txt
+          "$BT/aapt" dump badging "$APK" | tee output/apk-badging.txt
+          grep -F "versionCode='826'" output/apk-badging.txt
+          grep -F "versionName='8.2.0-Cerberus-Bionic-R7-PrefixPack-Launch'" output/apk-badging.txt
+          "$BT/aapt" dump xmltree "$APK" AndroidManifest.xml | tee output/manifest-tree.txt
+          grep -F 'pageSizeCompat' output/manifest-tree.txt
+
+          rm -rf /tmp/cerberus-apk-libs && mkdir -p /tmp/cerberus-apk-libs
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d /tmp/cerberus-apk-libs
+          READELF="$ANDROID_HOME/ndk/24.0.8215888/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"; export READELF
+          python3 - <<'PY' | tee output/elf-16k-report.txt
+          import os, pathlib, subprocess
+          root=pathlib.Path('/tmp/cerberus-apk-libs/lib/arm64-v8a'); readelf=os.environ['READELF']
+          owned={'libwinlator.so','libmidihandler.so','libvirglrenderer.so','libvortekrenderer.so','libgladiorenderer.so'}; bad=[]
+          for p in sorted(root.glob('*.so')):
+              out=subprocess.check_output([readelf,'-lW',str(p)],text=True,errors='replace')
+              aligns=[int(line.split()[-1],16) for line in out.splitlines() if line.lstrip().startswith('LOAD')]
+              m=min(aligns) if aligns else 0; print(f'{p.name}: min_LOAD_align={hex(m)}')
+              if p.name in owned and m < 0x4000: bad.append(p.name)
+          if bad: raise SystemExit('Cerberus-owned ELF not 16K: '+','.join(bad))
+          print('CERBERUS_OWNED_16K=PASS')
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          apk=Path('output/Cerberus-Winlator-V8.2.0-BIONIC-R7-PREFIXPACK-LAUNCH.apk')
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None
+              names=set(z.namelist())
+              assert 'assets/cerberus-bionic/manifest.json' in names
+              assert any(x.startswith('assets/cerberus-bionic/imagefs.') for x in names)
+              assert any(x.startswith('assets/cerberus-bionic/container-pattern-x86_64.') for x in names)
+              assert any(x.startswith('assets/cerberus-bionic/container-pattern-arm64ec.') for x in names)
+          h=hashlib.sha256()
+          with apk.open('rb') as f:
+              for b in iter(lambda:f.read(1024*1024),b''): h.update(b)
+          digest=h.hexdigest()
+          Path(str(apk)+'.sha256').write_text(f'{digest}  {apk.name}\n')
+          Path('output/apk-size.txt').write_text(str(apk.stat().st_size)+'\n')
+          print(f'APK verified: {apk.stat().st_size} bytes; SHA256={digest}')
+          PY
+
+      - name: Publish verified R7 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK=output/Cerberus-Winlator-V8.2.0-BIONIC-R7-PREFIXPACK-LAUNCH.apk
+          TAG="cerberus-bionic-v8.2.0-r7-prefixpack-launch-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "$APK#Cerberus-Winlator-V8.2.0-BIONIC-R7-PREFIXPACK-LAUNCH.apk" \
+            "$APK.sha256#Cerberus-Winlator-V8.2.0-BIONIC-R7-PREFIXPACK-LAUNCH.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Cerberus Winlator V8.2.0 BIONIC R7 PrefixPack Launch" \
+            --notes "R7 preserves R4 Android 16/16 KiB, R5 Bionic bootstrap and R6 Proton/FEXCore infrastructure. It removes forced wineboot -u from normal Bionic startup, validates and launches the selected Wine/Proton prefixPack directly, transactionally recovers prefixes interrupted by R6, and removes the legacy Box64 preset UI/state from all Bionic engines while leaving Classic/GLIBC unchanged."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,tagName,assets | tee output/release.json
