@@ -1,0 +1,57 @@
+name: Cerberus Bionic PC v0.6
+
+on:
+  push:
+    branches: [cerberus-bionicpc-v06]
+    paths:
+      - 'cerberus/**'
+      - 'settings.gradle'
+      - '.github/workflows/cerberus-v06-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Build Cerberus APK
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :cerberus:clean :cerberus:assembleDebug --no-daemon --stacktrace
+
+      - name: Package release bundle
+        shell: bash
+        run: |
+          set -e
+          mkdir -p dist/source
+          cp cerberus/build/outputs/apk/debug/cerberus-debug.apk dist/CerberusBionicPC-v0.6.0-container-arm64.apk
+          cp -R cerberus dist/source/cerberus
+          cp settings.gradle build.gradle gradle.properties dist/source/
+          (cd dist/source && zip -qr ../CerberusBionicPC-v0.6.0-source.zip .)
+          (cd dist && sha256sum CerberusBionicPC-v0.6.0-container-arm64.apk CerberusBionicPC-v0.6.0-source.zip > SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CerberusBionicPC-v0.6.0-ContainerSession
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
