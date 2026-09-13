@@ -2,7 +2,8 @@ package com.cerberus.bionicpc;
 
 import android.app.*;
 import android.graphics.Typeface;
-import android.os.*;
+import android.os.Bundle;
+import android.os.PowerManager;
 import android.view.*;
 import android.widget.*;
 import java.io.*;
