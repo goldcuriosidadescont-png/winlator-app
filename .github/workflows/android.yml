@@ -1,17 +1,18 @@
-name: Cerberus PC - v0.3 Display Runtime APK
+name: Cerberus PC - v0.3.1 Boot UI APK
 on:
   push:
-    branches: [ 'cerberuspc-display-v0.3.0' ]
+    branches: [ 'cerberuspc-boot-ui-v0.3.1' ]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  display-runtime:
+  boot-ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct verified v0.3 source and apply build fixes
+
+      - name: Reconstruct verified v0.3 base and apply v0.3.1 patch
         run: |
           cat ci/v0.3/source64.part* | base64 -d > /tmp/CerberusPC-v0.3.0-source.tar.zst
           echo '55424ea835354ac845317f2efe81e4bb66565a812d725da5294ed00c11cc2990  /tmp/CerberusPC-v0.3.0-source.tar.zst' | sha256sum -c -
@@ -20,51 +21,50 @@ jobs:
           rm -rf build-v03
           mkdir -p build-v03
           tar -xf /tmp/CerberusPC-v0.3.0-source.tar -C build-v03
-          python3 - <<'PY'
-          from pathlib import Path
 
-          p = Path('build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py')
-          s = p.read_text()
-          old = '''    xkb = prefix / "share" / "X11" / "xkb"\n    if not xkb.is_dir(): raise RuntimeError("xkeyboard-config data missing")\n'''
-          new = '''    xkb_candidates = [\n        prefix / "share" / "X11" / "xkb",\n        prefix / "share" / "xkeyboard-config-2",\n        prefix / "share" / "xkb",\n    ]\n    xkb = next((p for p in xkb_candidates if p.is_dir()), None)\n    if xkb is None:\n        for candidate in prefix.rglob("*"):\n            if not candidate.is_dir():\n                continue\n            if all((candidate / part).exists() for part in ("rules", "symbols", "keycodes", "types", "compat")):\n                xkb = candidate\n                break\n    if xkb is None:\n        roots = sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*xkb*") if p.is_dir())\n        raise RuntimeError("xkeyboard-config data missing; candidates=" + ",".join(roots[:30]))\n    print("xkeyboard-config root:", xkb)\n'''
-          if old not in s:
-              raise SystemExit('expected XKB block not found')
-          p.write_text(s.replace(old, new))
+          cat ci/v0.3.1/patch64.part* | base64 -d > /tmp/CerberusPC-v0.3.1-patch.tar.gz
+          echo 'ca112aaf3ba94e98e367d87829ead8d55303d6d45481b6c49ea95db81682d593  /tmp/CerberusPC-v0.3.1-patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/CerberusPC-v0.3.1-patch.tar.gz -C build-v03/CerberusPC-v0.3.0
 
-          java = Path('build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java')
-          js = java.read_text()
-          old_key = 'case KeyEvent.KEYCODE_END: return new KeyStroke(115, false);'
-          new_key = 'case KeyEvent.KEYCODE_MOVE_END: return new KeyStroke(115, false);'
-          if old_key not in js:
-              raise SystemExit('expected KEYCODE_END mapping not found')
-          java.write_text(js.replace(old_key, new_key))
-          PY
-          python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
+          grep -F "versionCode 4" build-v03/CerberusPC-v0.3.0/app/build.gradle
+          grep -F "versionName '0.3.1-boot-ui-stability'" build-v03/CerberusPC-v0.3.0/app/build.gradle
           grep -F 'KEYCODE_MOVE_END' build-v03/CerberusPC-v0.3.0/app/src/main/java/dev/cerberus/pc/X11ProtocolClient.java
+          grep -F 'xkeyboard-config-2' build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
+          python3 -m py_compile build-v03/CerberusPC-v0.3.0/tools/prepare_display_runtime_ci.py
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+
       - uses: android-actions/setup-android@v3
+
       - name: Install pinned Android toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.0.13004108' 'cmake;3.22.1'
+
       - name: Install runtime packaging tools
         run: sudo apt-get update -qq && sudo apt-get install -y zstd xz-utils binutils dpkg python3
+
       - name: Core tests with sanitizers
         working-directory: build-v03/CerberusPC-v0.3.0
         run: sh tools/test_host.sh
+
       - name: Java and JNI integration
         working-directory: build-v03/CerberusPC-v0.3.0
         run: sh tools/test_bridge.sh
+
       - name: Stage Box64 + Proton/Wine runtime
         working-directory: build-v03/CerberusPC-v0.3.0
         run: bash tools/prepare_runtime_ci.sh
+
       - name: Stage Cerberus X11 display runtime
         working-directory: build-v03/CerberusPC-v0.3.0
         run: python3 tools/prepare_display_runtime_ci.py
+
       - name: Validate staged display components
         working-directory: build-v03/CerberusPC-v0.3.0
         run: |
@@ -76,18 +76,25 @@ jobs:
           readelf -h app/src/main/jniLibs/arm64-v8a/libcerberus_xvfb.so | grep -E 'AArch64|ARM64'
           tar -tzf app/src/main/assets/runtime/x11-guest.tar.gz | grep -E '(^|/)libX11\.so'
           tar -tzf app/src/main/assets/runtime/x11-guest.tar.gz | grep -E '(^|/)libXext\.so'
+
       - name: Build and lint ARM64 debug APK
         working-directory: build-v03/CerberusPC-v0.3.0
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
-      - name: Verify runtime payload in APK
+
+      - name: Verify v0.3.1 APK payload
         run: |
           APK='build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          unzip -tq "$APK"
           unzip -l "$APK" | grep -E 'lib/arm64-v8a/libbox64.so|lib/arm64-v8a/libcerberus_xvfb.so|lib/arm64-v8a/libcerberus_xkbcomp.so|assets/runtime/proton.tar.gz|assets/runtime/prefix-template.tar.gz|assets/runtime/x11-guest.tar.gz|assets/runtime/x11-xkb.tar.gz|assets/runtime/x11-native-map.properties'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libcerberus_x11dep_' | head -1
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionCode='4'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "versionName='0.3.1-boot-ui-stability'"
           sha256sum "$APK"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: CerberusPC-v0.3.0-DisplayRuntime-arm64-debug
+          name: CerberusPC-v0.3.1-BootUI-arm64-debug
           path: build-v03/CerberusPC-v0.3.0/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           compression-level: 0
