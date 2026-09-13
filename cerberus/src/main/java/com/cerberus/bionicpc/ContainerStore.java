@@ -98,10 +98,10 @@ final class ContainerStore {
             o.put("renderer", p.renderer);
             o.put("dxMode", p.dxMode);
             o.put("memoryMiB", p.memoryMiB);
+            writeTextAtomic(new File(dir, "profile.json"), o.toString(2));
         } catch (Exception e) {
-            throw new IOException(e);
+            throw new IOException("Falha serializando profile.json", e);
         }
-        writeTextAtomic(new File(dir, "profile.json"), o.toString(2));
         dir.setLastModified(System.currentTimeMillis());
     }
 
