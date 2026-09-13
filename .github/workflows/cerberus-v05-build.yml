@@ -1,0 +1,75 @@
+name: Cerberus Bionic PC v0.5 All-In-One
+
+on:
+  push:
+    branches:
+      - cerberus-v0.5-builder
+    paths:
+      - 'cerberus-v05/**'
+      - '.github/workflows/cerberus-v05-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'cerberus-v05/**'
+      - '.github/workflows/cerberus-v05-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-cerberus-v05:
+    name: Build standalone Cerberus v0.5 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk || true
+          df -h
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform/build-tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl xz-utils tar unzip zip file binutils python3
+
+      - name: Build Cerberus v0.5 all-in-one APK
+        working-directory: cerberus-v05
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Show build result
+        if: always()
+        run: |
+          find cerberus-v05/build/out -maxdepth 1 -type f -printf '%f %s bytes\n' 2>/dev/null || true
+          df -h
+
+      - name: Upload Cerberus APK + signing identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: CerberusBionicPC-v0.5.0-AllInOne
+          path: |
+            cerberus-v05/build/out/CerberusBionicPC-v0.5.0-AllInOne-arm64.apk
+            cerberus-v05/build/out/SHA256SUMS.txt
+            cerberus-v05/build/out/INSTALL.txt
+            cerberus-v05/build/out/cerberus-v05.keystore
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
